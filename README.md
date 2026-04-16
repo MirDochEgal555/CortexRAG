@@ -142,40 +142,80 @@ python scripts\build_confluence_vector_store.py --backend faiss --collection asa
 }
 ```
 
-### 8. Query the Vector Store
-- Run a retrieval-only query against the built store:
+### 8. Retrieve Context Chunks
+- Run the query script to retrieve context-ready chunks from the built store:
 
 ```powershell
-python scripts\query_confluence_vector_store.py "What does the architecture say about the execution layer?" --top-k 3
+python scripts\query_confluence_vector_store.py "What does the architecture say about the execution layer?"
 ```
 
-- The query script embeds the question with the same embedding model recorded in the manifest unless you override it.
+- The query flow now uses a two-stage retrieval pass:
+  - retrieve `10` raw embedding-similarity candidates by default
+  - rerank them with page and section heuristics
+  - drop near-duplicate chunks by normalized text and chunk overlap
+  - keep the top `5` chunks by default, which you can lower to `3` when you want a tighter context window
+- Context retrieval embeds the question with the same embedding model recorded in the manifest unless you override it.
+- You can override the candidate pool size, final result count, or minimum similarity score:
+
+```powershell
+python scripts\query_confluence_vector_store.py "How are leads qualified?" --candidate-k 10 --top-k 3 --min-score 0.7
+```
+
 - If the model is not cached locally and the machine is offline, pass a local model path:
 
 ```powershell
 python scripts\query_confluence_vector_store.py "How are leads qualified?" --model C:\models\all-MiniLM-L6-v2
 ```
 
-- The reusable Python API now exposes query embedding as a separate step, which is useful if you want to inspect or reuse the query vector before retrieval:
+- The reusable Python API exposes both high-level context retrieval and lower-level similarity search when you want to inspect or reuse the query vector:
 
 ```python
 from pathlib import Path
 
-from cortex_rag.retrieval import embed_confluence_query, search_confluence_vector_store_by_embedding
+from cortex_rag.retrieval import (
+    embed_confluence_query,
+    retrieve_confluence_context,
+    retrieve_confluence_context_by_embedding,
+    similarity_search_confluence_vector_store,
+    similarity_search_confluence_vector_store_by_embedding,
+)
+
+context_results = retrieve_confluence_context(
+    "How are leads qualified?",
+    candidate_k=10,
+    final_k=5,
+    min_score=0.7,
+    persist_dir=Path("storage/chroma"),
+    collection_name="confluence",
+)
 
 query_embedding, manifest = embed_confluence_query(
     "How are leads qualified?",
     persist_dir=Path("storage/chroma"),
     collection_name="confluence",
 )
-results = search_confluence_vector_store_by_embedding(
+context_results = retrieve_confluence_context_by_embedding(
+    "How are leads qualified?",
     query_embedding,
-    top_k=3,
+    candidate_k=10,
+    final_k=3,
+    persist_dir=Path("storage/chroma"),
+    collection_name=manifest.collection_name,
+    backend=manifest.backend,
+)
+
+raw_results = similarity_search_confluence_vector_store_by_embedding(
+    query_embedding,
+    top_k=10,
     persist_dir=Path("storage/chroma"),
     collection_name=manifest.collection_name,
     backend=manifest.backend,
 )
 ```
+
+- The higher-level `retrieve_confluence_context(...)` path is intended for downstream generation prep.
+- The lower-level `similarity_search_confluence_vector_store(...)` APIs remain available when you want raw nearest-neighbor results without reranking or deduplication.
+- The older `query_confluence_vector_store(...)` and `search_confluence_vector_store_by_embedding(...)` names still work as compatibility aliases.
 
 ## Tools and Libraries
 - Embeddings: Sentence Transformers
@@ -261,6 +301,8 @@ For an archive like `data/raw/confluence/ASA_2026-04-16.zip`, the script writes 
 - The chunking logic lives in `src/cortex_rag/ingestion/confluence_chunks.py`.
 - The embedding logic lives in `src/cortex_rag/retrieval/confluence_embeddings.py`.
 - The vector-store build and query logic lives in `src/cortex_rag/retrieval/vector_store.py`.
+- Similarity search is implemented as `similarity_search_confluence_vector_store(...)`.
+- Context retrieval is implemented as `retrieve_confluence_context(...)`.
 - Query embedding is implemented as `embed_confluence_query(...)` so the question-to-vector step can be reused independently from the search call.
 - The ingestion and retrieval packages expose the current pipeline entry points.
 - HTML preprocessing and chunking use only the Python standard library.
@@ -273,4 +315,4 @@ For an archive like `data/raw/confluence/ASA_2026-04-16.zip`, the script writes 
 3. Re-run chunk generation from `data/processed/confluence/`.
 4. Re-run embedding generation from `data/chunks/confluence/`.
 5. Rebuild the vector store from `storage/embeddings/confluence/`.
-6. Feed top-k retrieval results into the local generation pipeline.
+6. Feed the reranked, deduplicated context results into the local generation pipeline.

@@ -6,6 +6,7 @@ from dataclasses import asdict, dataclass
 import json
 import math
 from pathlib import Path
+import re
 from typing import Any, Literal, cast
 
 from cortex_rag.config import (
@@ -20,6 +21,47 @@ from cortex_rag.retrieval.embedding_utils import TextEncoder, encode_texts, load
 VectorBackend = Literal["auto", "chroma", "faiss"]
 ResolvedBackend = Literal["chroma", "faiss"]
 CONFLUENCE_EMBEDDINGS_DIR = EMBEDDINGS_DIR / "confluence"
+_NORMALIZE_TEXT_PATTERN = re.compile(r"[^a-z0-9]+")
+_QUERY_STOPWORDS = {
+    "a",
+    "an",
+    "and",
+    "are",
+    "as",
+    "at",
+    "be",
+    "by",
+    "can",
+    "did",
+    "do",
+    "does",
+    "for",
+    "from",
+    "how",
+    "in",
+    "is",
+    "it",
+    "of",
+    "on",
+    "or",
+    "that",
+    "the",
+    "this",
+    "to",
+    "what",
+    "when",
+    "where",
+    "which",
+    "who",
+    "why",
+    "with",
+}
+_PAGE_AGREEMENT_BOOST = 0.05
+_MAX_PAGE_AGREEMENT_BOOST = 0.15
+_SECTION_KEYWORD_BOOST = 0.03
+_MAX_SECTION_KEYWORD_BOOST = 0.12
+_NEAR_DUPLICATE_OVERLAP_THRESHOLD = 0.85
+_MIN_OVERLAP_TOKENS = 5
 
 
 @dataclass(frozen=True)
@@ -55,6 +97,79 @@ class SearchResult:
     score: float
     text: str
     metadata: dict[str, Any]
+
+
+def retrieve_confluence_context(
+    query_text: str,
+    *,
+    candidate_k: int = 10,
+    final_k: int = 5,
+    persist_dir: Path = VECTOR_DB_DIR,
+    collection_name: str = DEFAULT_VECTOR_COLLECTION,
+    backend: VectorBackend = "auto",
+    model_name: str | None = None,
+    batch_size: int = 32,
+    normalize_embeddings: bool = True,
+    device: str | None = None,
+    encoder: TextEncoder | None = None,
+    min_score: float | None = None,
+) -> list[SearchResult]:
+    """Retrieve a smaller, context-ready set of chunks for generation prep."""
+
+    query_embedding, manifest = embed_confluence_query(
+        query_text,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        backend=backend,
+        model_name=model_name,
+        batch_size=batch_size,
+        normalize_embeddings=normalize_embeddings,
+        device=device,
+        encoder=encoder,
+    )
+    return retrieve_confluence_context_by_embedding(
+        query_text,
+        query_embedding,
+        candidate_k=candidate_k,
+        final_k=final_k,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        backend=manifest.backend,
+        min_score=min_score,
+    )
+
+
+def retrieve_confluence_context_by_embedding(
+    query_text: str,
+    query_embedding: list[float],
+    *,
+    candidate_k: int = 10,
+    final_k: int = 5,
+    persist_dir: Path = VECTOR_DB_DIR,
+    collection_name: str = DEFAULT_VECTOR_COLLECTION,
+    backend: VectorBackend = "auto",
+    min_score: float | None = None,
+) -> list[SearchResult]:
+    """Retrieve, rerank, deduplicate, and trim search results for downstream use."""
+
+    if candidate_k <= 0:
+        raise ValueError("candidate_k must be positive.")
+    if final_k <= 0:
+        raise ValueError("final_k must be positive.")
+
+    candidates = similarity_search_confluence_vector_store_by_embedding(
+        query_embedding,
+        top_k=max(candidate_k, final_k),
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        backend=backend,
+        min_score=min_score,
+    )
+    return _rerank_and_trim_results(
+        query_text,
+        candidates,
+        final_k=final_k,
+    )
 
 
 def build_confluence_vector_store(
@@ -98,7 +213,37 @@ def query_confluence_vector_store(
     device: str | None = None,
     encoder: TextEncoder | None = None,
 ) -> list[SearchResult]:
-    """Embed a query string and search the persistent vector store."""
+    """Backward-compatible alias for similarity_search_confluence_vector_store."""
+
+    return similarity_search_confluence_vector_store(
+        query_text,
+        top_k=top_k,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        backend=backend,
+        model_name=model_name,
+        batch_size=batch_size,
+        normalize_embeddings=normalize_embeddings,
+        device=device,
+        encoder=encoder,
+    )
+
+
+def similarity_search_confluence_vector_store(
+    query_text: str,
+    *,
+    top_k: int = 5,
+    persist_dir: Path = VECTOR_DB_DIR,
+    collection_name: str = DEFAULT_VECTOR_COLLECTION,
+    backend: VectorBackend = "auto",
+    model_name: str | None = None,
+    batch_size: int = 32,
+    normalize_embeddings: bool = True,
+    device: str | None = None,
+    encoder: TextEncoder | None = None,
+    min_score: float | None = None,
+) -> list[SearchResult]:
+    """Run similarity search against the persistent Confluence vector store."""
 
     query_embedding, manifest = embed_confluence_query(
         query_text,
@@ -111,12 +256,13 @@ def query_confluence_vector_store(
         device=device,
         encoder=encoder,
     )
-    return search_confluence_vector_store_by_embedding(
+    return similarity_search_confluence_vector_store_by_embedding(
         query_embedding,
         top_k=top_k,
         persist_dir=persist_dir,
         collection_name=collection_name,
         backend=manifest.backend,
+        min_score=min_score,
     )
 
 
@@ -158,6 +304,26 @@ def search_confluence_vector_store_by_embedding(
     collection_name: str = DEFAULT_VECTOR_COLLECTION,
     backend: VectorBackend = "auto",
 ) -> list[SearchResult]:
+    """Backward-compatible alias for similarity_search_confluence_vector_store_by_embedding."""
+
+    return similarity_search_confluence_vector_store_by_embedding(
+        query_embedding,
+        top_k=top_k,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        backend=backend,
+    )
+
+
+def similarity_search_confluence_vector_store_by_embedding(
+    query_embedding: list[float],
+    *,
+    top_k: int = 5,
+    persist_dir: Path = VECTOR_DB_DIR,
+    collection_name: str = DEFAULT_VECTOR_COLLECTION,
+    backend: VectorBackend = "auto",
+    min_score: float | None = None,
+) -> list[SearchResult]:
     """Search the persistent vector store using a precomputed query embedding."""
 
     if top_k <= 0:
@@ -175,19 +341,21 @@ def search_confluence_vector_store_by_embedding(
         )
 
     if manifest.backend == "chroma":
-        return _query_chroma_collection(
+        results = _query_chroma_collection(
+            query_embedding,
+            top_k=top_k,
+            persist_dir=persist_dir,
+            collection_name=collection_name,
+        )
+    else:
+        results = _query_faiss_index(
             query_embedding,
             top_k=top_k,
             persist_dir=persist_dir,
             collection_name=collection_name,
         )
 
-    return _query_faiss_index(
-        query_embedding,
-        top_k=top_k,
-        persist_dir=persist_dir,
-        collection_name=collection_name,
-    )
+    return _filter_search_results(results, min_score=min_score)
 
 
 def load_vector_store_manifest(
@@ -508,11 +676,146 @@ def _load_faiss_records(path: Path) -> list[dict[str, Any]]:
     return records
 
 
+def _rerank_and_trim_results(
+    query_text: str,
+    results: list[SearchResult],
+    *,
+    final_k: int,
+) -> list[SearchResult]:
+    query_keywords = _extract_query_keywords(query_text)
+    page_counts = _count_pages(results)
+    reranked = [
+        _rerank_result(
+            result,
+            query_keywords=query_keywords,
+            page_counts=page_counts,
+        )
+        for result in results
+    ]
+    reranked.sort(
+        key=lambda result: (
+            -result.score,
+            -float(result.metadata.get("retrieval_similarity_score", result.score)),
+            result.chunk_id,
+        )
+    )
+
+    deduplicated: list[SearchResult] = []
+    for result in reranked:
+        if any(_is_near_duplicate(result, kept) for kept in deduplicated):
+            continue
+        deduplicated.append(result)
+        if len(deduplicated) >= final_k:
+            break
+
+    return deduplicated
+
+
+def _rerank_result(
+    result: SearchResult,
+    *,
+    query_keywords: set[str],
+    page_counts: dict[str, int],
+) -> SearchResult:
+    metadata = dict(result.metadata)
+    page_title = _metadata_text(metadata, "page")
+    section_title = _metadata_text(metadata, "section")
+
+    page_key = _normalize_text(page_title)
+    page_hit_count = page_counts.get(page_key, 0) if page_key else 0
+    page_bonus = min(max(page_hit_count - 1, 0) * _PAGE_AGREEMENT_BOOST, _MAX_PAGE_AGREEMENT_BOOST)
+
+    section_keywords = set(_tokenize_text(section_title))
+    overlap = sorted(query_keywords & section_keywords)
+    section_bonus = min(len(overlap) * _SECTION_KEYWORD_BOOST, _MAX_SECTION_KEYWORD_BOOST)
+
+    reranked_score = result.score + page_bonus + section_bonus
+    metadata["retrieval_similarity_score"] = result.score
+    metadata["retrieval_rerank_score"] = reranked_score
+    metadata["retrieval_page_hit_count"] = page_hit_count
+    metadata["retrieval_section_keyword_overlap"] = overlap
+
+    return SearchResult(
+        chunk_id=result.chunk_id,
+        score=reranked_score,
+        text=result.text,
+        metadata=metadata,
+    )
+
+
+def _count_pages(results: list[SearchResult]) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for result in results:
+        page_key = _normalize_text(_metadata_text(result.metadata, "page"))
+        if not page_key:
+            continue
+        counts[page_key] = counts.get(page_key, 0) + 1
+    return counts
+
+
+def _is_near_duplicate(candidate: SearchResult, kept: SearchResult) -> bool:
+    candidate_text = _normalize_text(candidate.text)
+    kept_text = _normalize_text(kept.text)
+    if candidate_text and candidate_text == kept_text:
+        return True
+
+    candidate_tokens = set(_tokenize_text(candidate.text))
+    kept_tokens = set(_tokenize_text(kept.text))
+    if not candidate_tokens or not kept_tokens:
+        return False
+
+    overlap_count = len(candidate_tokens & kept_tokens)
+    if overlap_count < _MIN_OVERLAP_TOKENS:
+        return False
+
+    smaller_size = min(len(candidate_tokens), len(kept_tokens))
+    if smaller_size == 0:
+        return False
+
+    return overlap_count / smaller_size >= _NEAR_DUPLICATE_OVERLAP_THRESHOLD
+
+
+def _extract_query_keywords(query_text: str) -> set[str]:
+    return {
+        token
+        for token in _tokenize_text(query_text)
+        if len(token) >= 3 and token not in _QUERY_STOPWORDS
+    }
+
+
+def _tokenize_text(text: str) -> list[str]:
+    normalized = _normalize_text(text)
+    if not normalized:
+        return []
+    return normalized.split()
+
+
+def _normalize_text(text: str) -> str:
+    ascii_text = text.encode("ascii", "ignore").decode("ascii").lower()
+    collapsed = _NORMALIZE_TEXT_PATTERN.sub(" ", ascii_text)
+    return " ".join(collapsed.split())
+
+
+def _metadata_text(metadata: dict[str, Any], key: str) -> str:
+    value = metadata.get(key)
+    return str(value).strip() if value not in (None, "") else ""
+
+
 def _normalize_vector(vector: list[float]) -> list[float]:
     norm = math.sqrt(sum(value * value for value in vector))
     if norm == 0.0:
         return vector
     return [value / norm for value in vector]
+
+
+def _filter_search_results(
+    results: list[SearchResult],
+    *,
+    min_score: float | None,
+) -> list[SearchResult]:
+    if min_score is None:
+        return results
+    return [result for result in results if result.score >= min_score]
 
 
 def _batched(records: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:

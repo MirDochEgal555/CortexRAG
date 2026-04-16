@@ -11,6 +11,10 @@ from cortex_rag.retrieval.vector_store import (
     embed_confluence_query,
     load_vector_store_manifest,
     query_confluence_vector_store,
+    retrieve_confluence_context,
+    retrieve_confluence_context_by_embedding,
+    similarity_search_confluence_vector_store,
+    similarity_search_confluence_vector_store_by_embedding,
     search_confluence_vector_store_by_embedding,
 )
 
@@ -23,5 +27,9 @@ __all__ = [
     "generate_confluence_space_embeddings",
     "load_vector_store_manifest",
     "query_confluence_vector_store",
+    "retrieve_confluence_context",
+    "retrieve_confluence_context_by_embedding",
+    "similarity_search_confluence_vector_store",
+    "similarity_search_confluence_vector_store_by_embedding",
     "search_confluence_vector_store_by_embedding",
 ]

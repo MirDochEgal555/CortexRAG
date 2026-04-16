@@ -1,20 +1,45 @@
+# Virtual environments and local env files
 .venv/
+.env
+.env.*
+.python-version
+
+# Local scratch and test temp directories
 .tmp/
 .codex-pytest-temp/
 .pytest-tmp/
 tmp_pytest/
 scratch*/
 pytest-cache-files-*/
+
+# Python caches and tooling
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.tox/
+.nox/
+.coverage
+.coverage.*
+coverage.xml
+htmlcov/
 .ipynb_checkpoints/
-.env
+
+# Editor and OS files
+.vscode/
+.idea/
+.DS_Store
 Thumbs.db
+
+# Python build artifacts
 *.pyc
 *.pyo
 *.pyd
+build/
+dist/
+*.egg-info/
+
+# Local generated data
 data/tmp*/
 data/raw/*
 !data/raw/.gitkeep
