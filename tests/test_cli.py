@@ -42,3 +42,31 @@ def test_similarity_search_cli_formats_results(
         "   Overview :: Lead qualification",
         "   The agent qualifies and prioritizes leads.",
     ]
+
+
+def test_similarity_search_cli_skips_empty_metadata_line(
+    monkeypatch,
+    capsys,
+) -> None:
+    def fake_retrieve_context(query: str, **kwargs: object) -> list[SearchResult]:
+        assert query == "What changed?"
+        assert kwargs["candidate_k"] == 10
+        assert kwargs["final_k"] == 5
+        assert kwargs["min_score"] is None
+        return [
+            SearchResult(
+                chunk_id="overview-3178688:002",
+                score=0.5,
+                text="First line\nSecond line",
+                metadata={},
+            )
+        ]
+
+    monkeypatch.setattr(cli, "retrieve_confluence_context", fake_retrieve_context)
+
+    cli.main(["similarity-search", "What changed?"])
+
+    assert capsys.readouterr().out.splitlines() == [
+        "1. overview-3178688:002  score=0.5000",
+        "   First line Second line",
+    ]

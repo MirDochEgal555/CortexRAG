@@ -5,6 +5,7 @@ This project is a lightweight Retrieval-Augmented Generation (RAG) system that a
 
 ## Documentation
 - Production deployment planning: `docs/production-deployment.md`
+- Testing guide: `docs/testing.md`
 
 ## Current Knowledge Ingestion Process
 
@@ -313,6 +314,7 @@ Notes:
 - If the virtual environment is already activated, `pytest -q` also works.
 - Test discovery is limited to `tests/` via `pytest.ini`.
 - Temporary test directories are provided by `tests/conftest.py` under `scratch_pytest/` to avoid Windows temp-directory permission issues seen on some machines.
+- Edge-case coverage for prompt loading, empty retrieval results, streaming generation fallbacks, and CLI formatting is documented in `docs/testing.md`.
 
 ## Project Structure
 ```text
