@@ -41,11 +41,36 @@ During preprocessing, the converter:
 - resolves internal Confluence page links to local Markdown links
 - produces stable Markdown filenames derived from page title and page id
 
-### 5. Next Pipeline Step
-- Chunk the generated Markdown files into retrieval-sized sections.
-- Create embeddings for those chunks.
-- Store them in the local vector database.
-- Use the retrieved chunks as context for local generation.
+### 5. Chunk Markdown into Retrieval Records
+- Run the chunking script after preprocessing:
+
+```powershell
+python scripts\chunk_confluence_exports.py
+```
+
+- The script scans `data/processed/confluence/`.
+- It writes JSONL chunk files under `data/chunks/confluence/<SPACE_KEY>/`.
+- Chunks are heading-aware and target roughly `200-500` words when the source material is long enough.
+- Each chunk includes page metadata plus internal page links when they can be resolved.
+
+Example chunk:
+
+```json
+{
+  "page": "RAG Architecture",
+  "section": "Embeddings",
+  "headings": ["RAG Architecture", "Embeddings"],
+  "text": "Embeddings convert text into vectors...",
+  "source": "confluence",
+  "links": [
+    {
+      "text": "Retrieval",
+      "target_path": "retrieval-222.md",
+      "target_page": "Retrieval"
+    }
+  ]
+}
+```
 
 ## Tools and Libraries
 - Embeddings: Sentence Transformers
@@ -102,15 +127,18 @@ For an archive like `data/raw/confluence/ASA_2026-04-16.zip`, the script writes 
 - `data/processed/confluence/ASA/space-index.md`
 - `data/processed/confluence/ASA/overview-3178688.md`
 - `data/processed/confluence/ASA/architecture-3309569.md`
+- `data/chunks/confluence/ASA/overview-3178688.jsonl`
+- `data/chunks/confluence/ASA/architecture-3309569.jsonl`
 
 ## Implementation Notes
 - The preprocessing logic lives in `src/cortex_rag/ingestion/confluence_html.py`.
-- The ingestion package exposes `preprocess_confluence_archive` and `preprocess_confluence_exports`.
+- The chunking logic lives in `src/cortex_rag/ingestion/confluence_chunks.py`.
+- The ingestion package exposes preprocessing and chunking entry points.
 - The current converter uses only the Python standard library.
 
 ## Next Steps
 1. Keep raw Confluence exports in `data/raw/confluence/`.
 2. Re-run preprocessing whenever a new export is added.
-3. Add chunk generation from `data/processed/confluence/`.
+3. Re-run chunk generation from `data/processed/confluence/`.
 4. Build embeddings and retrieval on top of those chunks.
 5. Connect the retrieval output to the local generation pipeline.

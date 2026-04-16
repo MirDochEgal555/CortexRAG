@@ -87,7 +87,7 @@ def test_preprocess_confluence_archive_creates_markdown_pages(tmp_path: Path) ->
     assert 'created_on: "2026-03-28"' in overview_text
     assert "# Product Overview" in overview_text
     assert "- First item" in overview_text
-    assert "[Home](ai-sales-agent-home-3178669.md)" in overview_text
+    assert "[Home](home-3178669.md)" in overview_text
 
     index_path = output_dir / "ASA" / "space-index.md"
     index_text = index_path.read_text(encoding="utf-8")

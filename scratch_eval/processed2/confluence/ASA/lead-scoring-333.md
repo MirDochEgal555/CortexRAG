@@ -1,0 +1,26 @@
+---
+space_key: "ASA"
+space_name: "AI Sales Agent"
+page_title: "Lead Scoring"
+page_type: "page"
+source_zip: "ASA_2026-04-16.zip"
+source_html: "ASA/Lead-Scoring_333.html"
+breadcrumbs:
+  - "AI Sales Agent"
+created_by: "Robin Keim"
+created_on: "2026-03-28"
+---
+
+# Lead Scoring
+
+## Signals
+
+signals0 signals1 signals2 signals3 signals4 signals5 signals6 signals7 signals8 signals9 signals10 signals11 signals12 signals13 signals14 signals15 signals16 signals17 signals18 signals19 signals20 signals21 signals22 signals23 signals24 signals25 signals26 signals27 signals28 signals29 signals30 signals31 signals32 signals33 signals34 signals35 signals36 signals37 signals38 signals39 signals40 signals41 signals42 signals43 signals44 signals45 signals46 signals47 signals48 signals49 signals50 signals51 signals52 signals53 signals54 signals55 signals56 signals57 signals58 signals59 signals60 signals61 signals62 signals63 signals64 signals65 signals66 signals67 signals68 signals69 signals70 signals71 signals72 signals73 signals74
+
+## Thresholds
+
+thresholds0 thresholds1 thresholds2 thresholds3 thresholds4 thresholds5 thresholds6 thresholds7 thresholds8 thresholds9 thresholds10 thresholds11 thresholds12 thresholds13 thresholds14 thresholds15 thresholds16 thresholds17 thresholds18 thresholds19 thresholds20 thresholds21 thresholds22 thresholds23 thresholds24 thresholds25 thresholds26 thresholds27 thresholds28 thresholds29 thresholds30 thresholds31 thresholds32 thresholds33 thresholds34 thresholds35 thresholds36 thresholds37 thresholds38 thresholds39 thresholds40 thresholds41 thresholds42 thresholds43 thresholds44 thresholds45 thresholds46 thresholds47 thresholds48 thresholds49 thresholds50 thresholds51 thresholds52 thresholds53 thresholds54 thresholds55 thresholds56 thresholds57 thresholds58 thresholds59 thresholds60 thresholds61 thresholds62 thresholds63 thresholds64 thresholds65 thresholds66 thresholds67 thresholds68 thresholds69 thresholds70 thresholds71 thresholds72 thresholds73 thresholds74
+
+## Routing
+
+routing0 routing1 routing2 routing3 routing4 routing5 routing6 routing7 routing8 routing9 routing10 routing11 routing12 routing13 routing14 routing15 routing16 routing17 routing18 routing19 routing20 routing21 routing22 routing23 routing24 routing25 routing26 routing27 routing28 routing29 routing30 routing31 routing32 routing33 routing34 routing35 routing36 routing37 routing38 routing39 routing40 routing41 routing42 routing43 routing44 routing45 routing46 routing47 routing48 routing49 routing50 routing51 routing52 routing53 routing54 routing55 routing56 routing57 routing58 routing59 routing60 routing61 routing62 routing63 routing64 routing65 routing66 routing67 routing68 routing69 routing70 routing71 routing72 routing73 routing74
