@@ -33,6 +33,48 @@ This project is a lightweight Retrieval-Augmented Generation (RAG) system that a
 - Vector Store: FAISS (or similar)
 - Local LLM: LLaMA/Mistral (via Ollama/LM Studio)
 
+## Python Environment
+This repository is set up to use a local virtual environment in `.venv`.
+
+### Recommended Python Version
+- Preferred: Python 3.11 or 3.12 for the widest package compatibility.
+- Current local fallback: Python 3.13 works with the included dependency set by using `chromadb` instead of `faiss-cpu`.
+
+### Create and Activate the Environment
+```powershell
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+python -m pip install --upgrade pip setuptools wheel
+pip install -r requirements-dev.txt
+```
+
+### Dependency Notes
+- `faiss-cpu` installs automatically on Python versions below 3.13.
+- `chromadb` is used automatically on Python 3.13 and newer as the vector store fallback.
+
+## Project Structure
+```text
+CortexRAG/
+├── data/
+│   ├── raw/          # Source documents
+│   ├── processed/    # Cleaned text extracted from documents
+│   └── chunks/       # Chunked text ready for embedding
+├── notebooks/        # Experiments and one-off exploration
+├── prompts/          # Prompt templates for local generation
+├── scripts/          # Helper scripts for ingestion or maintenance
+├── src/
+│   └── cortex_rag/
+│       ├── ingestion/   # Loading and chunking
+│       ├── retrieval/   # Embeddings and vector search
+│       ├── generation/  # Local model interaction
+│       ├── pipeline/    # End-to-end orchestration
+│       ├── cli.py
+│       └── config.py
+├── storage/
+│   └── chroma/       # Local vector database files
+└── tests/            # Automated tests
+```
+
 ## Next Steps
 1. Gather documents and preprocess them.
 2. Install FAISS and create embeddings.
