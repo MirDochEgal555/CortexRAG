@@ -10,5 +10,6 @@ PROCESSED_DATA_DIR = DATA_DIR / "processed"
 CHUNKS_DIR = DATA_DIR / "chunks"
 STORAGE_DIR = PROJECT_ROOT / "storage"
 CHROMA_DIR = STORAGE_DIR / "chroma"
+EMBEDDINGS_DIR = STORAGE_DIR / "embeddings"
 PROMPTS_DIR = PROJECT_ROOT / "prompts"
-
+DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"

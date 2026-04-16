@@ -1,10 +1,14 @@
 .venv/
 .tmp/
+scratch*/
+pytest-cache-files-*/
 __pycache__/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+.ipynb_checkpoints/
 .env
+Thumbs.db
 *.pyc
 *.pyo
 *.pyd
@@ -14,5 +18,7 @@ data/processed/*
 !data/processed/.gitkeep
 data/chunks/*
 !data/chunks/.gitkeep
+storage/embeddings/*
+!storage/embeddings/.gitkeep
 storage/chroma/*
 !storage/chroma/.gitkeep

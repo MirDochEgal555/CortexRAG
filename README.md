@@ -72,6 +72,44 @@ Example chunk:
 }
 ```
 
+### 6. Generate Embeddings from Chunk Files
+- Run the embedding script after chunking:
+
+```powershell
+python scripts\embed_confluence_chunks.py
+```
+
+- The script scans `data/chunks/confluence/`.
+- It writes embedding-enriched JSONL files under `storage/embeddings/confluence/<SPACE_KEY>/`.
+- By default it uses `sentence-transformers/all-MiniLM-L6-v2`.
+- Embeddings are L2-normalized by default, which makes cosine similarity and dot-product ranking equivalent.
+- You can override the model, batch size, device, or normalization behavior:
+
+```powershell
+python scripts\embed_confluence_chunks.py --model sentence-transformers/all-mpnet-base-v2 --batch-size 16 --device cpu
+python scripts\embed_confluence_chunks.py --no-normalize
+```
+
+- Each output record preserves the original chunk payload and appends `embedding_model`, `embedding_dimensions`, and `embedding`.
+
+Example embedded chunk:
+
+```json
+{
+  "chunk_id": "architecture-3309569:001",
+  "page": "RAG Architecture",
+  "section": "Embeddings",
+  "text": "Embeddings convert text into vectors...",
+  "embedding_model": "sentence-transformers/all-MiniLM-L6-v2",
+  "embedding_dimensions": 384,
+  "embedding": [0.0142, -0.0371, 0.0924]
+}
+```
+
+Notes:
+- The first run may download the selected SentenceTransformer model unless it is already cached locally.
+- If the machine is offline, pass a local model path to `--model`.
+
 ## Tools and Libraries
 - Embeddings: Sentence Transformers
 - Vector Store: FAISS (or similar)
@@ -99,27 +137,30 @@ pip install -r requirements-dev.txt
 ## Project Structure
 ```text
 CortexRAG/
-├── data/
-│   ├── raw/          # Source documents and exports
-│   │   └── confluence/   # Confluence HTML exports (.zip), one per space
-│   ├── processed/    # Cleaned text extracted from documents
-│   │   └── confluence/   # Markdown pages generated from Confluence exports
-│   └── chunks/       # Chunked text ready for embedding
-├── notebooks/        # Experiments and one-off exploration
-├── prompts/          # Prompt templates for local generation
-├── scripts/          # Helper scripts for ingestion or maintenance
-│   └── preprocess_confluence_exports.py
-├── src/
-│   └── cortex_rag/
-│       ├── ingestion/   # Loading, preprocessing, and chunking
-│       ├── retrieval/   # Embeddings and vector search
-│       ├── generation/  # Local model interaction
-│       ├── pipeline/    # End-to-end orchestration
-│       ├── cli.py
-│       └── config.py
-├── storage/
-│   └── chroma/       # Local vector database files
-└── tests/            # Automated tests
+|-- data/
+|   |-- raw/              # Source documents and exports
+|   |   `-- confluence/   # Confluence HTML exports (.zip), one per space
+|   |-- processed/        # Cleaned text extracted from documents
+|   |   `-- confluence/   # Markdown pages generated from Confluence exports
+|   `-- chunks/           # Chunked text ready for embedding
+|-- notebooks/            # Experiments and one-off exploration
+|-- prompts/              # Prompt templates for local generation
+|-- scripts/              # Helper scripts for ingestion or maintenance
+|   |-- preprocess_confluence_exports.py
+|   |-- chunk_confluence_exports.py
+|   `-- embed_confluence_chunks.py
+|-- src/
+|   `-- cortex_rag/
+|       |-- ingestion/    # Loading, preprocessing, and chunking
+|       |-- retrieval/    # Embeddings and vector search
+|       |-- generation/   # Local model interaction
+|       |-- pipeline/     # End-to-end orchestration
+|       |-- cli.py
+|       `-- config.py
+|-- storage/
+|   |-- embeddings/       # Embedded chunk JSONL files
+|   `-- chroma/           # Local vector database files
+`-- tests/                # Automated tests
 ```
 
 ## Generated Output Example
@@ -129,16 +170,20 @@ For an archive like `data/raw/confluence/ASA_2026-04-16.zip`, the script writes 
 - `data/processed/confluence/ASA/architecture-3309569.md`
 - `data/chunks/confluence/ASA/overview-3178688.jsonl`
 - `data/chunks/confluence/ASA/architecture-3309569.jsonl`
+- `storage/embeddings/confluence/ASA/overview-3178688.jsonl`
+- `storage/embeddings/confluence/ASA/architecture-3309569.jsonl`
 
 ## Implementation Notes
 - The preprocessing logic lives in `src/cortex_rag/ingestion/confluence_html.py`.
 - The chunking logic lives in `src/cortex_rag/ingestion/confluence_chunks.py`.
-- The ingestion package exposes preprocessing and chunking entry points.
-- The current converter uses only the Python standard library.
+- The embedding logic lives in `src/cortex_rag/retrieval/confluence_embeddings.py`.
+- The ingestion and retrieval packages expose the current pipeline entry points.
+- HTML preprocessing and chunking use only the Python standard library; embedding generation uses `sentence-transformers`.
 
 ## Next Steps
 1. Keep raw Confluence exports in `data/raw/confluence/`.
 2. Re-run preprocessing whenever a new export is added.
 3. Re-run chunk generation from `data/processed/confluence/`.
-4. Build embeddings and retrieval on top of those chunks.
-5. Connect the retrieval output to the local generation pipeline.
+4. Re-run embedding generation from `data/chunks/confluence/`.
+5. Load embedded chunks into the vector store.
+6. Connect retrieval output to the local generation pipeline.
