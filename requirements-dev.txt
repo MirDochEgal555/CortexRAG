@@ -1,5 +1,5 @@
 -r requirements.txt
+httpx
 ipykernel
 pytest
 ruff
-

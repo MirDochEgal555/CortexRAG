@@ -358,7 +358,7 @@ A fully local, interactive, explainable AI system that feels like:
 
 ## Next TODOs
 
-The current repo is still in Phase 1: ingestion, embeddings, vector search, and a CLI/scripted answer flow exist, but there is no API server or frontend yet. The next work should stay narrow and produce a usable UI slice quickly.
+The current repo is still in Phase 1: ingestion, embeddings, vector search, a package-level answer flow, and a thin API layer now exist, but there is still no frontend yet. The next work should stay narrow and produce a usable UI slice quickly.
 
 ### 1. Close out the current RAG surface
 
@@ -368,10 +368,10 @@ The current repo is still in Phase 1: ingestion, embeddings, vector search, and 
 
 ### 2. Add a thin backend for the UI
 
-- Create a small FastAPI app under `src/cortex_rag/api/`.
-- Start with four endpoints: `/health`, `/search`, `/answer`, and `/graph/neighborhood`.
-- Keep the API read-only for now. It should expose existing retrieval results as JSON, not invent a full graph database.
-- Add request/response schemas for search results, answer payloads, and graph nodes/edges.
+- Done: a small FastAPI app now lives under `src/cortex_rag/api/`.
+- Done: the first four endpoints exist: `/health`, `/search`, `/answer`, and `/graph/neighborhood`.
+- Done: the API is read-only and wraps existing retrieval/generation code instead of inventing a separate graph database.
+- Done: request/response schemas exist for search results, answer payloads, and graph nodes/edges.
 
 ### 3. Define the MVP graph model
 
@@ -414,8 +414,7 @@ The current repo is still in Phase 1: ingestion, embeddings, vector search, and 
 
 ### Suggested implementation order
 
-1. Add FastAPI endpoints on top of retrieval and generation.
-2. Generate graph JSON for document/chunk nodes and edges.
-3. Build the React graph shell and wire it to `/search`.
-4. Add the detail panel and answer panel.
-5. Add query-path highlighting and small visual polish.
+1. Generate graph JSON for document/chunk nodes and edges.
+2. Build the React graph shell and wire it to `/search`.
+3. Add the detail panel and answer panel.
+4. Add query-path highlighting and small visual polish.

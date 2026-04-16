@@ -44,6 +44,20 @@ python -m cortex_rag ask "How are leads qualified?" --mode technical
 
 `scripts\ask_confluence.py` still exists as a compatibility wrapper, but new usage should go through `python -m cortex_rag ...`.
 
+## UI Backend
+The thin UI backend now lives under `src/cortex_rag/api/` and exposes:
+
+- `GET /health`
+- `POST /search`
+- `POST /answer`
+- `POST /graph/neighborhood`
+
+Run it locally with:
+
+```powershell
+.\.venv\Scripts\python.exe -m uvicorn --app-dir src cortex_rag.api:create_app --factory --reload
+```
+
 ## Testing
 Run the test suite from the repository root:
 

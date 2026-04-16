@@ -1,7 +1,8 @@
+fastapi
+uvicorn
 sentence-transformers
 ollama
 pypdf
 python-dotenv
 faiss-cpu; python_version < "3.13"
 chromadb; python_version >= "3.13"
-
