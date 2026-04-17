@@ -247,120 +247,7 @@ export default function App() {
         </div>
       </header>
 
-      <main className="workspace-grid">
-        <section className="panel panel-canvas">
-          <div className="panel-header">
-            <div>
-              <p className="panel-kicker">Graph Mode</p>
-              <h2>Knowledge canvas</h2>
-            </div>
-            <div className="panel-badges">
-              <span className="badge">Documents + Chunks</span>
-              <span className="badge">Belongs + Similarity</span>
-            </div>
-          </div>
-
-          <div className="canvas-stage">
-            <div ref={graphContainerRef} className="graph-canvas" />
-            {!graph && (
-              <div className="canvas-empty">
-                <p>Run a query to render the first graph neighborhood.</p>
-                <div className="example-row">
-                  {EXAMPLE_QUERIES.map((example) => (
-                    <button
-                      key={example}
-                      type="button"
-                      className="example-pill"
-                      onClick={() => setQuery(example)}
-                    >
-                      {example}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <aside className="panel panel-sidebar">
-          <div className="panel-header">
-            <div>
-              <p className="panel-kicker">Detail Panel</p>
-              <h2>{selectedNode?.label ?? "No node selected"}</h2>
-            </div>
-            {selectedNode && <span className={`type-chip type-${selectedNode.type}`}>{selectedNode.type}</span>}
-          </div>
-
-          <section className="detail-section">
-            <h3>Node details</h3>
-            {selectedNode ? (
-              <>
-                <p className="detail-copy">{describeNode(selectedNode)}</p>
-                <dl className="meta-grid">
-                  {Object.entries(selectedNode.metadata).map(([key, value]) => (
-                    <div key={key} className="meta-row">
-                      <dt>{formatLabel(key)}</dt>
-                      <dd>{formatValue(value)}</dd>
-                    </div>
-                  ))}
-                </dl>
-              </>
-            ) : (
-              <p className="muted">Click a node to inspect its source metadata and connected neighbors.</p>
-            )}
-          </section>
-
-          <section className="detail-section">
-            <h3>Related nodes</h3>
-            {connectedNodes.length > 0 ? (
-              <div className="related-list">
-                {connectedNodes.map((node) => (
-                  <button
-                    key={node.id}
-                    type="button"
-                    className="related-card"
-                    onClick={() => setSelectedNodeId(node.id)}
-                  >
-                    <strong>{node.label}</strong>
-                    <span>{node.type}</span>
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="muted">Related nodes appear here once a graph neighborhood has been loaded.</p>
-            )}
-          </section>
-
-          <section className="detail-section answer-section">
-            <h3>Grounded answer</h3>
-            {answer ? (
-              <>
-                <p className="answer-text">{answer.answer || "No grounded answer was generated."}</p>
-                <div className="answer-meta">
-                  <span>{answer.answer_mode}</span>
-                  <span>{answer.backend}</span>
-                  <span>{answer.timings.total_seconds.toFixed(2)}s total</span>
-                </div>
-                <div className="sources-list">
-                  {answer.sources.map((source) => (
-                    <article key={source.chunk_id} className="source-card">
-                      <header>
-                        <strong>{source.metadata.page as string || source.chunk_id}</strong>
-                        <span>{source.score.toFixed(3)}</span>
-                      </header>
-                      <p>{source.text}</p>
-                    </article>
-                  ))}
-                </div>
-              </>
-            ) : (
-              <p className="muted">The answer panel fills after you submit a query.</p>
-            )}
-          </section>
-        </aside>
-      </main>
-
-      <footer className="query-dock">
+      <section className="query-dock">
         <form className="query-form" onSubmit={handleSubmit}>
           <label className="query-label" htmlFor="query">
             Ask the graph
@@ -420,7 +307,131 @@ export default function App() {
             )}
           </div>
         </div>
-      </footer>
+      </section>
+
+      <main className="workspace-grid">
+        <section className="panel panel-canvas">
+          <div className="panel-header">
+            <div>
+              <p className="panel-kicker">Graph Mode</p>
+              <h2>Knowledge canvas</h2>
+            </div>
+            <div className="panel-badges">
+              <span className="badge">Documents + Chunks</span>
+              <span className="badge">Belongs + Similarity</span>
+            </div>
+          </div>
+
+          <div className="canvas-stage">
+            <div ref={graphContainerRef} className="graph-canvas" />
+            {!graph && (
+              <div className="canvas-empty">
+                <p>Run a query to render the first graph neighborhood.</p>
+                <div className="example-row">
+                  {EXAMPLE_QUERIES.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      className="example-pill"
+                      onClick={() => setQuery(example)}
+                    >
+                      {example}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </section>
+
+        <div className="sidebar-stack">
+          <section className="panel panel-answer">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Answer Panel</p>
+                <h2>Grounded answer</h2>
+              </div>
+            </div>
+
+            <section className="detail-section answer-section">
+              {answer ? (
+                <>
+                  <p className="answer-text">{answer.answer || "No grounded answer was generated."}</p>
+                  <div className="answer-meta">
+                    <span>{answer.answer_mode}</span>
+                    <span>{answer.backend}</span>
+                    <span>{answer.timings.total_seconds.toFixed(2)}s total</span>
+                  </div>
+                  <div className="sources-list">
+                    {answer.sources.map((source) => (
+                      <article key={source.chunk_id} className="source-card">
+                        <header>
+                          <strong>{source.metadata.page as string || source.chunk_id}</strong>
+                          <span>{source.score.toFixed(3)}</span>
+                        </header>
+                        <p>{source.text}</p>
+                      </article>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <p className="muted">The answer panel fills after you submit a query.</p>
+              )}
+            </section>
+          </section>
+
+          <aside className="panel panel-sidebar">
+            <div className="panel-header">
+              <div>
+                <p className="panel-kicker">Detail Panel</p>
+                <h2>{selectedNode?.label ?? "No node selected"}</h2>
+              </div>
+              {selectedNode && <span className={`type-chip type-${selectedNode.type}`}>{selectedNode.type}</span>}
+            </div>
+
+            <section className="detail-section">
+              <h3>Node details</h3>
+              {selectedNode ? (
+                <>
+                  <p className="detail-copy">{nodeSummary(selectedNode)}</p>
+                  {nodeSource(selectedNode) && <p className="detail-source">{nodeSource(selectedNode)}</p>}
+                  <dl className="meta-grid">
+                    {Object.entries(selectedNode.metadata).map(([key, value]) => (
+                      <div key={key} className="meta-row">
+                        <dt>{formatLabel(key)}</dt>
+                        <dd>{formatValue(value)}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </>
+              ) : (
+                <p className="muted">Click a node to inspect its source metadata and connected neighbors.</p>
+              )}
+            </section>
+
+            <section className="detail-section">
+              <h3>Related nodes</h3>
+              {connectedNodes.length > 0 ? (
+                <div className="related-list">
+                  {connectedNodes.map((node) => (
+                    <button
+                      key={node.id}
+                      type="button"
+                      className="related-card"
+                      onClick={() => setSelectedNodeId(node.id)}
+                    >
+                      <strong>{node.label}</strong>
+                      <span>{node.type}</span>
+                    </button>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">Related nodes appear here once a graph neighborhood has been loaded.</p>
+              )}
+            </section>
+          </aside>
+        </div>
+      </main>
 
       {errorMessage && (
         <div className="error-toast" role="alert">
@@ -501,6 +512,31 @@ function describeNode(node: GraphNodePayload): string {
     return "Document nodes anchor the retrieved neighborhood and show which source page the active chunks came from.";
   }
   return "Chunk nodes represent the retrieval-ready text units that ground the answer and connect through similarity edges.";
+}
+
+function nodeSummary(node: GraphNodePayload): string {
+  const summary = node.metadata.summary;
+  if (typeof summary === "string" && summary.trim()) {
+    return summary.trim();
+  }
+  return describeNode(node);
+}
+
+function nodeSource(node: GraphNodePayload): string | null {
+  const page = typeof node.metadata.page === "string" ? node.metadata.page.trim() : "";
+  const section = typeof node.metadata.section === "string" ? node.metadata.section.trim() : "";
+  const sourcePath = typeof node.metadata.source_path === "string" ? node.metadata.source_path.trim() : "";
+
+  if (page && section && section !== page) {
+    return `${page} / ${section}`;
+  }
+  if (page) {
+    return page;
+  }
+  if (sourcePath) {
+    return sourcePath;
+  }
+  return null;
 }
 
 function MetricCard(props: { label: string; value: string; tone?: "ok" | "warn" }) {
