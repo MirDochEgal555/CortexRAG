@@ -296,6 +296,7 @@ button {
 .detail-source,
 .muted,
 .answer-text,
+.evidence-card p,
 .source-card p,
 .summary-value {
   color: var(--muted);
@@ -338,13 +339,16 @@ button {
 }
 
 .related-list,
-.sources-list {
+.sources-list,
+.evidence-list {
   display: grid;
   gap: 0.75rem;
 }
 
 .related-card,
-.source-card {
+.source-card,
+.evidence-card,
+.summary-hit {
   width: 100%;
   padding: 0.85rem 0.95rem;
   border: 1px solid var(--line);
@@ -354,14 +358,19 @@ button {
 }
 
 .related-card strong,
-.source-card strong {
+.source-card strong,
+.evidence-card strong,
+.summary-hit strong {
   display: block;
   margin-bottom: 0.2rem;
 }
 
 .related-card span,
 .answer-meta span,
-.source-card header span {
+.source-card header span,
+.evidence-card header span,
+.summary-hit span,
+.summary-hit em {
   color: var(--muted);
   font-size: 0.82rem;
 }
@@ -373,7 +382,8 @@ button {
   margin-bottom: 0.9rem;
 }
 
-.source-card header {
+.source-card header,
+.evidence-card header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
@@ -383,6 +393,16 @@ button {
 .source-card p {
   margin: 0.6rem 0 0;
   font-size: 0.92rem;
+}
+
+.evidence-card p {
+  margin: 0.45rem 0 0;
+  font-size: 0.9rem;
+}
+
+.source-meta {
+  margin: 0.3rem 0 0;
+  font-size: 0.82rem;
 }
 
 .query-dock {
@@ -470,15 +490,19 @@ button {
   gap: 1rem;
 }
 
-.summary-list {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.6rem;
+.summary-hit-list {
+  display: grid;
+  gap: 0.65rem;
 }
 
-.summary-chip {
-  padding: 0.55rem 0.9rem;
-  background: rgba(255, 255, 255, 0.05);
+.summary-hit span,
+.summary-hit em {
+  display: block;
+}
+
+.summary-hit em {
+  margin-top: 0.35rem;
+  font-style: normal;
 }
 
 .error-toast {

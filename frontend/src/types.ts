@@ -41,6 +41,7 @@ export interface GraphNodePayload {
   type: GraphNodeType;
   label: string;
   highlighted: boolean;
+  in_query_path: boolean;
   metadata: Record<string, unknown>;
 }
 
@@ -50,6 +51,7 @@ export interface GraphEdgePayload {
   target: string;
   type: GraphEdgeType;
   weight: number | null;
+  in_query_path: boolean;
   metadata: Record<string, unknown>;
 }
 

@@ -14,6 +14,7 @@ import type {
   GraphEdgePayload,
   GraphNeighborhoodResponse,
   GraphNodePayload,
+  SearchResultPayload,
   SearchResponse
 } from "./types";
 
@@ -92,7 +93,16 @@ export default function App() {
             "text-halign": "center",
             "border-width": 1,
             "border-color": "#eec57c",
-            "background-opacity": "0.95"
+            "background-opacity": "0.95",
+            opacity: 0.34,
+            "text-opacity": 0.72
+          }
+        },
+        {
+          selector: "node[inQueryPath = 1]",
+          style: {
+            opacity: 1,
+            "text-opacity": 1
           }
         },
         {
@@ -131,9 +141,23 @@ export default function App() {
         {
           selector: "edge",
           style: {
-            width: 2,
-            opacity: 0.66,
+            width: 1.5,
+            opacity: 0.16,
             "curve-style": "bezier"
+          }
+        },
+        {
+          selector: "edge[inQueryPath = 1]",
+          style: {
+            width: 3,
+            opacity: 0.9
+          }
+        },
+        {
+          selector: "edge[selected = 1]",
+          style: {
+            width: 4,
+            opacity: 1
           }
         },
         {
@@ -224,6 +248,7 @@ export default function App() {
   const selectedNode = graph?.nodes.find((node) => node.id === selectedNodeId) ?? null;
   const selectedEdges = graph ? relatedEdges(graph.edges, selectedNodeId) : [];
   const connectedNodes = graph ? relatedNodes(graph.nodes, selectedEdges, selectedNodeId) : [];
+  const selectedMatches = selectedNode ? searchResultsForNode(selectedNode, search?.results ?? []) : [];
 
   return (
     <div className="app-shell">
@@ -290,15 +315,17 @@ export default function App() {
           <div>
             <p className="summary-label">Top hits</p>
             {search && search.results.length > 0 ? (
-              <div className="summary-list">
+              <div className="summary-hit-list">
                 {search.results.slice(0, 3).map((result) => (
                   <button
                     key={result.chunk_id}
                     type="button"
-                    className="summary-chip"
+                    className="summary-hit"
                     onClick={() => setSelectedNodeId(`chunk::${result.chunk_id}`)}
                   >
-                    {(result.metadata.section as string) || result.chunk_id}
+                    <strong>{(result.metadata.section as string) || result.chunk_id}</strong>
+                    <span>{searchResultSource(result)}</span>
+                    <em>score {result.score.toFixed(3)}</em>
                   </button>
                 ))}
               </div>
@@ -369,6 +396,7 @@ export default function App() {
                           <strong>{source.metadata.page as string || source.chunk_id}</strong>
                           <span>{source.score.toFixed(3)}</span>
                         </header>
+                        <p className="source-meta">{searchResultSource(source)}</p>
                         <p>{source.text}</p>
                       </article>
                     ))}
@@ -396,7 +424,7 @@ export default function App() {
                   <p className="detail-copy">{nodeSummary(selectedNode)}</p>
                   {nodeSource(selectedNode) && <p className="detail-source">{nodeSource(selectedNode)}</p>}
                   <dl className="meta-grid">
-                    {Object.entries(selectedNode.metadata).map(([key, value]) => (
+                    {visibleMetadataEntries(selectedNode.metadata).map(([key, value]) => (
                       <div key={key} className="meta-row">
                         <dt>{formatLabel(key)}</dt>
                         <dd>{formatValue(value)}</dd>
@@ -406,6 +434,31 @@ export default function App() {
                 </>
               ) : (
                 <p className="muted">Click a node to inspect its source metadata and connected neighbors.</p>
+              )}
+            </section>
+
+            <section className="detail-section">
+              <h3>Retrieval evidence</h3>
+              {selectedNode ? (
+                selectedMatches.length > 0 ? (
+                  <div className="evidence-list">
+                    {selectedMatches.map((match) => (
+                      <article key={match.chunk_id} className="evidence-card">
+                        <header>
+                          <strong>{match.chunk_id}</strong>
+                          <span>{match.score.toFixed(3)}</span>
+                        </header>
+                        <p>{searchResultSource(match)}</p>
+                      </article>
+                    ))}
+                  </div>
+                ) : selectedNode.in_query_path ? (
+                  <p className="muted">This node is part of the current query path, but it was included as context rather than a direct retrieval hit.</p>
+                ) : (
+                  <p className="muted">This node is not part of the current query path.</p>
+                )
+              ) : (
+                <p className="muted">Submit a query and select a node to inspect retrieval evidence.</p>
               )}
             </section>
 
@@ -421,12 +474,31 @@ export default function App() {
                       onClick={() => setSelectedNodeId(node.id)}
                     >
                       <strong>{node.label}</strong>
-                      <span>{node.type}</span>
+                      <span>{node.in_query_path ? `${node.type} • query path` : node.type}</span>
                     </button>
                   ))}
                 </div>
               ) : (
                 <p className="muted">Related nodes appear here once a graph neighborhood has been loaded.</p>
+              )}
+            </section>
+
+            <section className="detail-section">
+              <h3>Edge explanations</h3>
+              {selectedNode && selectedEdges.length > 0 && graph ? (
+                <div className="evidence-list">
+                  {selectedEdges.map((edge) => (
+                    <article key={edge.id} className="evidence-card">
+                      <header>
+                        <strong>{edgePeerLabel(edge, selectedNode.id, graph.nodes)}</strong>
+                        <span>{edge.weight !== null ? edge.weight.toFixed(3) : edge.type}</span>
+                      </header>
+                      <p>{edgeExplanation(edge)}</p>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <p className="muted">Select a node to inspect why its connecting edges exist.</p>
               )}
             </section>
           </aside>
@@ -452,6 +524,7 @@ function buildElements(
       label: node.label,
       type: node.type,
       highlighted: node.highlighted ? 1 : 0,
+      inQueryPath: node.in_query_path ? 1 : 0,
       selected: selectedNodeId === node.id ? 1 : 0
     }
   }));
@@ -462,7 +535,9 @@ function buildElements(
       source: edge.source,
       target: edge.target,
       type: edge.type,
-      weight: edge.weight ?? 0
+      weight: edge.weight ?? 0,
+      inQueryPath: edge.in_query_path ? 1 : 0,
+      selected: selectedNodeId !== null && (edge.source === selectedNodeId || edge.target === selectedNodeId) ? 1 : 0
     }
   }));
 
@@ -507,6 +582,10 @@ function formatValue(value: unknown): string {
   return String(value);
 }
 
+function visibleMetadataEntries(metadata: Record<string, unknown>): Array<[string, unknown]> {
+  return Object.entries(metadata).filter(([key]) => !["summary", "shared_metadata", "explanation"].includes(key));
+}
+
 function describeNode(node: GraphNodePayload): string {
   if (node.type === "document") {
     return "Document nodes anchor the retrieved neighborhood and show which source page the active chunks came from.";
@@ -537,6 +616,55 @@ function nodeSource(node: GraphNodePayload): string | null {
     return sourcePath;
   }
   return null;
+}
+
+function searchResultsForNode(node: GraphNodePayload, results: SearchResultPayload[]): SearchResultPayload[] {
+  if (node.type === "chunk") {
+    const chunkId = typeof node.metadata.chunk_id === "string" ? node.metadata.chunk_id : "";
+    return results.filter((result) => result.chunk_id === chunkId);
+  }
+
+  const sourcePath = typeof node.metadata.source_path === "string" ? node.metadata.source_path : "";
+  const page = typeof node.metadata.page === "string" ? node.metadata.page : "";
+  return results.filter((result) => {
+    const resultPath = typeof result.metadata.source_path === "string" ? result.metadata.source_path : "";
+    const resultPage = typeof result.metadata.page === "string" ? result.metadata.page : "";
+    return (sourcePath && resultPath === sourcePath) || (!sourcePath && page && resultPage === page);
+  });
+}
+
+function searchResultSource(result: SearchResultPayload): string {
+  const page = typeof result.metadata.page === "string" ? result.metadata.page : "";
+  const section = typeof result.metadata.section === "string" ? result.metadata.section : "";
+  const sourcePath = typeof result.metadata.source_path === "string" ? result.metadata.source_path : "";
+
+  if (page && section && section !== page) {
+    return `${page} / ${section}`;
+  }
+  if (page) {
+    return page;
+  }
+  if (sourcePath) {
+    return sourcePath;
+  }
+  return result.chunk_id;
+}
+
+function edgePeerLabel(edge: GraphEdgePayload, selectedNodeId: string, nodes: GraphNodePayload[]): string {
+  const otherNodeId = edge.source === selectedNodeId ? edge.target : edge.source;
+  const otherNode = nodes.find((node) => node.id === otherNodeId);
+  return otherNode?.label ?? otherNodeId;
+}
+
+function edgeExplanation(edge: GraphEdgePayload): string {
+  const explanation = edge.metadata.explanation;
+  if (typeof explanation === "string" && explanation.trim()) {
+    return explanation.trim();
+  }
+  if (edge.type === "belongs_to") {
+    return "Same document: this edge links a chunk to its source page.";
+  }
+  return "Nearest-neighbor similarity between chunks.";
 }
 
 function MetricCard(props: { label: string; value: string; tone?: "ok" | "warn" }) {
