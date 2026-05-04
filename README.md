@@ -20,6 +20,7 @@ The repository currently supports:
 - UI vision: [docs/ui-vision.md](docs/ui-vision.md)
 - Testing: [docs/testing.md](docs/testing.md)
 - Production deployment: [docs/production-deployment.md](docs/production-deployment.md)
+- Server transfer runbook: [docs/server-transfer.md](docs/server-transfer.md)
 
 ## Quick Start
 

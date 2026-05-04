@@ -1,0 +1,6 @@
+services:
+  api:
+    volumes:
+      - ./data:/app/data
+      - ./storage:/app/storage
+      - model-cache:/app/.cache

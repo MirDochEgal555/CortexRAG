@@ -1,0 +1,36 @@
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    env_file:
+      - deploy/cortexrag.env.example
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+    volumes:
+      - ./data:/app/data:ro
+      - ./storage:/app/storage:ro
+      - model-cache:/app/.cache
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    ports:
+      - "${CORTEXRAG_BIND_IP:-127.0.0.1}:8080:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:0.6.7
+    volumes:
+      - ollama:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  model-cache:
+  ollama:

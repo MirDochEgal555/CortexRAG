@@ -29,25 +29,25 @@ The current production target should be:
 
 - one Linux host
 - one checked-out repo
-- one Python virtual environment
-- one local Ollama service
-- one Uvicorn process for the backend
-- one reverse proxy serving the frontend and proxying API requests to the backend
+- Docker Compose on one host
+- one private Ollama service inside the Compose network
+- one FastAPI backend container
+- one web container serving the frontend and proxying API requests
+- access restricted to VPN or another private network boundary
 
 ## Recommended Architecture
 
-For the first stable deployment, keep the system on one machine:
+For the first stable deployment, keep the system on one machine with Docker Compose:
 
-- reverse proxy: Nginx or Caddy
-- static frontend: `frontend/dist`
-- backend: Uvicorn running `cortex_rag.api:create_app`
-- local model runtime: Ollama on localhost
+- web container: Nginx serving the built `frontend/dist`
+- backend container: Uvicorn running `cortex_rag.api:create_app`
+- model runtime: Ollama in the private Compose network
 - persistent artifacts: repo-local `data/` and `storage/`
 
 Request flow:
 
-1. browser requests the frontend from the reverse proxy
-2. the same origin proxies `/health`, `/search`, `/answer`, and `/graph/*` to Uvicorn
+1. browser requests the frontend through the VPN-only web port
+2. the web container proxies `/health`, `/search`, `/answer`, and `/graph/*` to the API container
 3. the backend loads the vector-store manifest and graph artifact
 4. the backend embeds the query and retrieves context
 5. the backend optionally calls Ollama for grounded generation
@@ -59,8 +59,8 @@ The frontend can be configured with `VITE_API_BASE_URL`, but the backend current
 
 That means the safest production setup is:
 
-- serve the frontend and API from the same public origin
-- proxy API routes through Nginx or Caddy
+- serve the frontend and API from the same origin
+- proxy API routes through the `web` container
 - do not deploy the frontend on one origin and the backend on another unless you add CORS support first
 
 For the current codebase, same-origin proxying is the correct default.
@@ -116,9 +116,7 @@ Example layout on Linux:
 
 ```text
 /opt/cortexrag/app/            # checked-out repository
-/opt/cortexrag/venv/           # Python virtual environment
-/etc/cortexrag/cortexrag.env   # service environment variables
-/var/log/cortexrag/            # optional app logs if not using journald only
+/opt/cortexrag/app/.env        # Compose binding settings, not secrets
 ```
 
 Because the repo currently expects `data/` and `storage/` relative to the checkout, the simplest working layout is:
@@ -223,15 +221,13 @@ If the browser UI is deployed, the graph artifact is mandatory because `/graph/n
 
 - Linux host
 - checked-out repo under `/opt/cortexrag/app`
-- Python virtual environment under `/opt/cortexrag/venv`
-- `pip install -e .`
-- Ollama installed locally
-- Uvicorn managed by `systemd`
-- Nginx or Caddy serving the frontend and proxying API routes
+- Docker Compose
+- `web` container bound only to `127.0.0.1` or the server VPN IP
+- `api` and `ollama` reachable only inside the Compose network
+- repo-local `data/` and `storage/` mounted into the API container
 
 ### Defer for later
 
-- multi-container orchestration
 - cross-origin frontend/backend split
 - multi-node inference or retrieval services
 - online indexing from the public app
@@ -251,43 +247,30 @@ python -m cortex_rag build-vector-store --with-graph
 
 If production should stay read-only, do this in CI or in a staging build environment and ship the resulting `data/` and `storage/` contents with the deployment.
 
-### 2. Build the frontend
+### 2. Build and start the containers
+
+From the repo root on the server:
 
 ```bash
-cd frontend
-npm ci
-npm run build
+docker compose build
+docker compose up -d
+docker compose exec ollama ollama pull llama3.2:3b
 ```
 
-This produces `frontend/dist/`.
-
-For the current backend, prefer a same-origin deployment and do not set a cross-origin `VITE_API_BASE_URL` unless you also add backend CORS support.
-
-### 3. Install the Python app
-
-From the repo root:
-
-```bash
-python3.12 -m venv /opt/cortexrag/venv
-source /opt/cortexrag/venv/bin/activate
-pip install --upgrade pip setuptools wheel
-pip install -r requirements.txt
-pip install -e .
-```
-
-The editable install is intentional. It keeps the package rooted in the checked-out repo so the current path logic resolves correctly.
+The frontend build happens inside `Dockerfile.web`. The Python install happens inside `Dockerfile.api`.
 
 ## Backend Start Command
 
-Run the backend with:
+The API container runs:
 
 ```bash
-/opt/cortexrag/venv/bin/python -m uvicorn --app-dir src cortex_rag.api:create_app --factory --host 127.0.0.1 --port 8000
+python -m uvicorn --app-dir src cortex_rag.api:create_app --factory --host 0.0.0.0 --port 8000
 ```
 
 Notes:
 
-- bind to localhost and let the reverse proxy handle public exposure
+- the API port is not published on the host
+- the `web` container is the only published service
 - start with one worker
 - use `GET /health` as the backend smoke test
 
@@ -299,72 +282,14 @@ The `/health` endpoint is meaningful here because it warms:
 
 If `/health` fails, the deployment is not ready to serve traffic.
 
-## Example `systemd` Service
+## Docker Web Proxy
 
-Example backend service:
-
-```ini
-[Unit]
-Description=CortexRAG API
-After=network.target ollama.service
-Requires=ollama.service
-
-[Service]
-Type=simple
-User=cortexrag
-Group=cortexrag
-WorkingDirectory=/opt/cortexrag/app
-EnvironmentFile=/etc/cortexrag/cortexrag.env
-ExecStart=/opt/cortexrag/venv/bin/python -m uvicorn --app-dir src cortex_rag.api:create_app --factory --host 127.0.0.1 --port 8000
-Restart=on-failure
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-```
-
-This matches the current codebase better than adding Gunicorn or multiple workers prematurely.
-
-## Example Nginx Shape
-
-The reverse proxy should do two jobs:
+The Docker web proxy does two jobs:
 
 - serve the built frontend
-- proxy API routes to the local Uvicorn backend
+- proxy API routes to the `api` service
 
-High-level Nginx shape:
-
-```nginx
-server {
-    listen 443 ssl http2;
-    server_name cortexrag.example.internal;
-
-    root /opt/cortexrag/app/frontend/dist;
-    index index.html;
-
-    location / {
-        try_files $uri /index.html;
-    }
-
-    location /health {
-        proxy_pass http://127.0.0.1:8000;
-    }
-
-    location /search {
-        proxy_pass http://127.0.0.1:8000;
-    }
-
-    location /answer {
-        proxy_pass http://127.0.0.1:8000;
-    }
-
-    location /graph/ {
-        proxy_pass http://127.0.0.1:8000;
-    }
-}
-```
-
-This aligns with the current frontend code, which calls:
+The committed config is `deploy/nginx-docker.conf`. It aligns with the current frontend code, which calls:
 
 - `/health`
 - `/search`
@@ -383,10 +308,10 @@ So for the current production deployment:
 - keep the repo checked out in its expected layout
 - keep production artifacts in the default repo-relative `data/` and `storage/` locations unless you also change request payloads or application code
 
-Suggested environment file:
+Suggested runtime environment:
 
 ```env
-OLLAMA_HOST=http://127.0.0.1:11434
+OLLAMA_HOST=http://ollama:11434
 OLLAMA_MODEL=llama3.2:3b
 OLLAMA_NUM_CTX=8192
 OLLAMA_NUM_PREDICT=192
@@ -407,11 +332,10 @@ The deployment doc should reflect that reality instead of pretending those knobs
 
 Before exposing the service beyond a trusted local machine:
 
-- run the backend under a dedicated non-root user
-- keep Ollama on localhost
-- expose only the reverse proxy publicly
-- terminate TLS at the reverse proxy
-- restrict who can reach the site
+- expose only the `web` container port
+- bind the published port to `127.0.0.1` or the server VPN IP
+- keep Ollama unexposed inside Compose
+- restrict who can reach the site through VPN membership and server firewall rules
 - do not expose ingestion commands or raw artifact directories over HTTP
 
 Important current gap:
@@ -420,7 +344,6 @@ Important current gap:
 
 So the production-safe assumption is:
 
-- internal deployment
 - VPN-restricted deployment
 - or reverse-proxy auth in front of the app
 
@@ -468,15 +391,12 @@ Before first rollout:
 
 - choose a Python version and keep it pinned
 - provision a Linux host with enough CPU or GPU for the chosen Ollama model
-- check out the repo on the server
-- create the Python virtual environment
-- install `requirements.txt`
-- install the package with `pip install -e .`
-- pull the pinned Ollama model
+- install Docker Engine and Docker Compose
+- copy the repo to the server
+- configure `.env` with `CORTEXRAG_BIND_IP`
 - copy or build `data/` and `storage/` artifacts on the server
-- build the frontend into `frontend/dist`
-- configure the `systemd` service for Uvicorn
-- configure same-origin reverse proxying
+- build and start the Compose stack
+- pull the pinned Ollama model inside the `ollama` container
 - verify `GET /health`
 - verify one real `/search` request
 - verify one real `/answer` request
@@ -500,7 +420,7 @@ The current deployment path is workable, but these repo changes would materially
 2. add backend CORS support only if a cross-origin deployment is actually needed
 3. add a real auth layer or put one in the reverse proxy
 4. add a `.env.example`
-5. add deployment examples for Nginx/Caddy and `systemd` as committed files
+5. add optional reverse-proxy auth examples for VPN-less environments
 6. add structured request logging in the API layer
 
 ## Non-Goals for the First Production Version
@@ -521,11 +441,11 @@ The first production version should be simple, same-origin, and easy to debug.
 The clean production deployment for the current repo is:
 
 - deploy a checked-out repository, not a wheel-only package
-- install with `pip install -e .`
 - keep `data/` and `storage/` in the repo layout the code expects
-- run one local Ollama service
-- run one local Uvicorn backend
-- serve the built frontend from a reverse proxy on the same origin
+- build and run with Docker Compose
+- run Ollama inside the private Compose network
+- serve the built frontend from the `web` container on the same origin
 - proxy `/health`, `/search`, `/answer`, and `/graph/*` to the backend
+- bind the published web port only to localhost or a VPN interface
 
 That architecture matches the code that exists now and avoids inventing deployment assumptions the repo does not yet support.
