@@ -53,7 +53,7 @@ rsync -az --delete \
 
 Replace `USER@SERVER` with your SSH user and server host.
 
-Generated corpus and vector-store files are ignored by Git, but `rsync` will copy your local `data/` and `storage/` files unless you exclude them. This local checkout currently has only placeholder files there, so you will need real artifacts or raw Confluence exports before the app can answer queries.
+Generated corpus and vector-store files are ignored by Git, but `rsync` will copy your local `data/` and `storage/` files unless you exclude them. This local checkout currently has only placeholder files there, so you will need real artifacts or raw Zotero/Obsidian inputs before the app can answer queries.
 
 If you cloned the repo and need to copy existing local artifacts, run this from your local repository root:
 
@@ -62,10 +62,11 @@ rsync -az data/ USER@SERVER:/opt/cortexrag/app/data/
 rsync -az storage/ USER@SERVER:/opt/cortexrag/app/storage/
 ```
 
-If you only want to copy raw Confluence exports and build everything on the server:
+If you only want to copy raw Zotero/Obsidian inputs and build everything on the server:
 
 ```bash
-rsync -az data/raw/confluence/ USER@SERVER:/opt/cortexrag/app/data/raw/confluence/
+rsync -az data/raw/obsidian/ USER@SERVER:/opt/cortexrag/app/data/raw/obsidian/
+rsync -az data/raw/zotero/ USER@SERVER:/opt/cortexrag/app/data/raw/zotero/
 ```
 
 On Windows PowerShell without `rsync`, use `scp`:
@@ -120,13 +121,16 @@ If artifacts were copied, verify:
 ls /opt/cortexrag/app/storage/chroma
 ```
 
-If you need to build artifacts on the server, copy raw Confluence exports to `data/raw/confluence/`, then run:
+If you need to build artifacts on the server, copy raw Obsidian and Zotero inputs to `data/raw/obsidian/` and `data/raw/zotero/`, then run:
 
 ```bash
-docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/preprocess_confluence_exports.py
-docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/chunk_confluence_exports.py
-docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/embed_confluence_chunks.py
+docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/preprocess_obsidian_vault.py
+docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/preprocess_zotero_export.py
+docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/chunk_obsidian_notes.py
+docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/chunk_zotero_items.py
+docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python scripts/embed_knowledge_chunks.py
 docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python -m cortex_rag build-vector-store --with-graph
+docker compose -f docker-compose.yml -f docker-compose.index.yml run --rm api python -m cortex_rag verify-index
 docker compose restart api
 ```
 

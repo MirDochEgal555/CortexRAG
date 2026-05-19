@@ -14,6 +14,7 @@ from cortex_rag.config import DEFAULT_VECTOR_COLLECTION, EMBEDDINGS_DIR, VECTOR_
 GraphNodeType = Literal["document", "chunk"]
 GraphEdgeType = Literal["belongs_to", "similar_to"]
 CONFLUENCE_EMBEDDINGS_DIR = EMBEDDINGS_DIR / "confluence"
+KNOWLEDGE_EMBEDDINGS_DIR = EMBEDDINGS_DIR / "knowledge"
 SUMMARY_MAX_CHARS = 320
 
 
@@ -156,6 +157,25 @@ def build_confluence_graph(
         chunk_node_count=graph.chunk_node_count,
         belongs_to_edge_count=graph.belongs_to_edge_count,
         similar_to_edge_count=graph.similar_to_edge_count,
+        similarity_top_k=similarity_top_k,
+        similarity_threshold=similarity_threshold,
+    )
+
+
+def build_knowledge_graph(
+    input_dir: Path = KNOWLEDGE_EMBEDDINGS_DIR,
+    persist_dir: Path = VECTOR_DB_DIR,
+    *,
+    collection_name: str = DEFAULT_VECTOR_COLLECTION,
+    similarity_top_k: int = 3,
+    similarity_threshold: float = 0.6,
+) -> GraphBuildResult:
+    """Build and persist the document/chunk graph from embedded Zotero and Obsidian chunks."""
+
+    return build_confluence_graph(
+        input_dir=input_dir,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
         similarity_top_k=similarity_top_k,
         similarity_threshold=similarity_threshold,
     )
@@ -408,6 +428,10 @@ def _chunk_node(record: dict[str, Any]) -> GraphNode:
 
 
 def _document_node_id(record: dict[str, Any]) -> str:
+    document_id = _text(record.get("document_id"))
+    if document_id:
+        return f"document::{document_id}"
+
     source_path = _text(record.get("source_path"))
     if source_path:
         return f"document::{source_path}"

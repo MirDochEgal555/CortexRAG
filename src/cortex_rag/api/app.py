@@ -22,8 +22,8 @@ from cortex_rag.api.serializers import (
 )
 from cortex_rag.generation import answer_confluence_question
 from cortex_rag.graph import build_graph_neighborhood, load_confluence_graph
+from cortex_rag.index_status import verify_current_searchable_index
 from cortex_rag.retrieval import (
-    load_vector_store_manifest,
     preload_sentence_transformer,
     retrieve_confluence_context,
 )
@@ -38,7 +38,7 @@ def warm_ui_runtime_assets(
     persist_dir=VECTOR_DB_DIR,
     collection_name: str = DEFAULT_VECTOR_COLLECTION,
 ) -> None:
-    """Preload the graph artifact and embedding model once per process."""
+    """Verify the UI index and preload the embedding model once per process."""
     cache_key = (str(persist_dir), collection_name)
     if cache_key in _WARMED_UI_RUNTIME_KEYS:
         return
@@ -46,16 +46,12 @@ def warm_ui_runtime_assets(
     with _UI_RUNTIME_WARMUP_LOCK:
         if cache_key in _WARMED_UI_RUNTIME_KEYS:
             return
-        manifest = load_vector_store_manifest(
-            persist_dir=persist_dir,
-            collection_name=collection_name,
-        )
-        load_confluence_graph(
+        index_status = verify_current_searchable_index(
             persist_dir=persist_dir,
             collection_name=collection_name,
         )
         preload_sentence_transformer(
-            model_name=manifest.embedding_model,
+            model_name=index_status.embedding_model,
             device=None,
         )
         _WARMED_UI_RUNTIME_KEYS.add(cache_key)

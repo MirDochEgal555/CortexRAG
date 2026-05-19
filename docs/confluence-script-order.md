@@ -17,14 +17,15 @@ Run the indexing flow from the repository root in this order:
 2. `python scripts\chunk_confluence_exports.py`
 3. `python scripts\embed_confluence_chunks.py`
 4. `python -m cortex_rag build-vector-store --with-graph`
+5. `python -m cortex_rag verify-index`
 
 After that, use one of these runtime paths:
 
-5. `python -m cortex_rag similarity-search "<question>"`
-6. `python -m cortex_rag ask "<question>"`
-7. start the API backend and frontend if you want the browser UI
+1. `python -m cortex_rag similarity-search "<question>"`
+2. `python -m cortex_rag ask "<question>"`
+3. start the API backend and frontend if you want the browser UI
 
-The first four steps refresh the knowledge base. The later steps are query-time or UI-time commands.
+The first five steps refresh and verify the knowledge base. The later steps are query-time or UI-time commands.
 
 ## Indexing Commands
 
@@ -136,7 +137,17 @@ python scripts\build_confluence_vector_store.py
 
 If you use the legacy script, build the graph separately afterward.
 
-### 5. Build only the graph artifact
+### 5. Verify the searchable index
+
+Use this before starting the UI backend or after copying artifacts to another machine:
+
+```powershell
+python -m cortex_rag verify-index
+```
+
+This checks the vector-store manifest, the backend-specific vector-store artifacts, and the graph artifact expected by `/graph/neighborhood`.
+
+### 6. Build only the graph artifact
 
 Use this when the vector store already exists and you only need to rebuild graph edges or graph metadata:
 
@@ -160,7 +171,7 @@ python scripts\build_confluence_graph.py
 
 ## Query Commands
 
-### 6. Inspect retrieval results
+### 7. Inspect retrieval results
 
 Preferred run:
 
@@ -196,7 +207,7 @@ Legacy script:
 python scripts\query_confluence_vector_store.py "How are leads qualified?"
 ```
 
-### 7. Ask a full RAG question
+### 8. Ask a full RAG question
 
 Preferred run:
 
@@ -235,7 +246,7 @@ Compatibility note:
 
 ## UI Commands
 
-### 8. Start the API backend
+### 9. Start the API backend
 
 Run from the repository root:
 
@@ -256,7 +267,7 @@ Endpoints exposed:
 - `POST /answer`
 - `POST /graph/neighborhood`
 
-### 9. Start the frontend
+### 10. Start the frontend
 
 Run in a second terminal:
 

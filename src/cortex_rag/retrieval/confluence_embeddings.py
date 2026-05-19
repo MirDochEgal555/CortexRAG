@@ -2,19 +2,16 @@
 
 from __future__ import annotations
 
-import json
 from pathlib import Path
 
 from cortex_rag.config import CHUNKS_DIR, DEFAULT_EMBEDDING_MODEL, EMBEDDINGS_DIR
-from cortex_rag.retrieval.embedding_utils import (
-    TextEncoder,
-    encode_texts,
-    load_sentence_transformer,
-)
+from cortex_rag.retrieval.chunk_embeddings import generate_chunk_embeddings
+from cortex_rag.retrieval.embedding_utils import TextEncoder
 
 
 CONFLUENCE_CHUNKS_DIR = CHUNKS_DIR / "confluence"
 CONFLUENCE_EMBEDDINGS_DIR = EMBEDDINGS_DIR / "confluence"
+
 
 def generate_confluence_embeddings(
     input_dir: Path = CONFLUENCE_CHUNKS_DIR,
@@ -28,33 +25,16 @@ def generate_confluence_embeddings(
 ) -> list[Path]:
     """Embed every chunk JSONL file produced from processed Confluence pages."""
 
-    if batch_size <= 0:
-        raise ValueError("batch_size must be positive.")
-
-    output_paths: list[Path] = []
-    if not input_dir.exists():
-        return output_paths
-
-    embedding_model = model_name
-    active_encoder = encoder
-    if active_encoder is None:
-        active_encoder = load_sentence_transformer(model_name=model_name, device=device)
-    embedding_model = str(getattr(active_encoder, "model_name_or_path", model_name))
-
-    for space_dir in sorted(path for path in input_dir.iterdir() if path.is_dir()):
-        output_paths.extend(
-            generate_confluence_space_embeddings(
-                space_dir,
-                input_dir=input_dir,
-                output_dir=output_dir,
-                model_name=embedding_model,
-                batch_size=batch_size,
-                normalize_embeddings=normalize_embeddings,
-                encoder=active_encoder,
-            )
-        )
-
-    return output_paths
+    return generate_chunk_embeddings(
+        [input_dir],
+        output_dir=output_dir,
+        model_name=model_name,
+        batch_size=batch_size,
+        normalize_embeddings=normalize_embeddings,
+        device=device,
+        encoder=encoder,
+        include_source_dir=False,
+    )
 
 
 def generate_confluence_space_embeddings(
@@ -69,55 +49,12 @@ def generate_confluence_space_embeddings(
 ) -> list[Path]:
     """Embed all chunk JSONL files inside one Confluence space directory."""
 
-    if batch_size <= 0:
-        raise ValueError("batch_size must be positive.")
-
-    chunk_paths = sorted(space_dir.glob("*.jsonl"))
-    if not chunk_paths:
-        return []
-
-    active_encoder = encoder or load_sentence_transformer(model_name=model_name, device=None)
-    embedding_model = str(getattr(active_encoder, "model_name_or_path", model_name))
-
-    space_output_dir = output_dir / space_dir.name
-    space_output_dir.mkdir(parents=True, exist_ok=True)
-
-    output_paths: list[Path] = []
-    for chunk_path in chunk_paths:
-        chunks = _load_chunk_records(chunk_path)
-        texts = [str(chunk.get("text", "")) for chunk in chunks]
-        vectors = encode_texts(
-            active_encoder,
-            texts,
-            batch_size=batch_size,
-            normalize_embeddings=normalize_embeddings,
-        )
-
-        records = [
-            {
-                **chunk,
-                "embedding_model": embedding_model,
-                "embedding_dimensions": len(vector),
-                "embedding": vector,
-            }
-            for chunk, vector in zip(chunks, vectors, strict=True)
-        ]
-
-        output_path = space_output_dir / chunk_path.name
-        lines = [json.dumps(record, ensure_ascii=False) for record in records]
-        output_path.write_text("\n".join(lines) + ("\n" if lines else ""), encoding="utf-8")
-        output_paths.append(output_path)
-
-    return output_paths
-
-def _load_chunk_records(path: Path) -> list[dict[str, object]]:
-    records: list[dict[str, object]] = []
-    for line in path.read_text(encoding="utf-8").splitlines():
-        stripped = line.strip()
-        if not stripped:
-            continue
-        payload = json.loads(stripped)
-        if not isinstance(payload, dict):
-            raise ValueError(f"Chunk file contains a non-object record: {path}")
-        records.append(payload)
-    return records
+    return generate_chunk_embeddings(
+        [space_dir],
+        output_dir=output_dir / space_dir.relative_to(input_dir),
+        model_name=model_name,
+        batch_size=batch_size,
+        normalize_embeddings=normalize_embeddings,
+        encoder=encoder,
+        include_source_dir=False,
+    )

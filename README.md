@@ -1,10 +1,10 @@
 # CortexRAG
 
-Local Confluence-to-RAG pipeline with a graph-first UI, grounded answering, and a thin FastAPI backend.
+Local Zotero/Obsidian-to-RAG pipeline with a graph-first UI, grounded answering, and a thin FastAPI backend.
 
 The repository currently supports:
 
-- Confluence HTML export preprocessing into Markdown
+- Zotero and Obsidian preprocessing into Markdown
 - heading-aware chunking into retrieval records
 - embedding generation with SentenceTransformers
 - persistent vector-store build with Chroma or FAISS
@@ -14,7 +14,8 @@ The repository currently supports:
 
 ## Docs
 
-- Workflow: [docs/confluence-workflow.md](docs/confluence-workflow.md)
+- Zotero/Obsidian workflow: [docs/zotero-obsidian-ingestion.md](docs/zotero-obsidian-ingestion.md)
+- Confluence workflow: [docs/confluence-workflow.md](docs/confluence-workflow.md)
 - Script order and runbook: [docs/confluence-script-order.md](docs/confluence-script-order.md)
 - UI usage: [docs/ui-usage.md](docs/ui-usage.md)
 - UI vision: [docs/ui-vision.md](docs/ui-vision.md)
@@ -34,13 +35,16 @@ pip install -r requirements-dev.txt
 pip install -e .
 ```
 
-Put Confluence HTML export zip files in `data/raw/confluence/`, then run the indexing flow:
+Put Obsidian vault copies under `data/raw/obsidian/` and a Zotero export under `data/raw/zotero/`, then run the indexing flow:
 
 ```powershell
-python scripts\preprocess_confluence_exports.py
-python scripts\chunk_confluence_exports.py
-python scripts\embed_confluence_chunks.py
+python scripts\preprocess_obsidian_vault.py
+python scripts\preprocess_zotero_export.py
+python scripts\chunk_obsidian_notes.py
+python scripts\chunk_zotero_items.py
+python scripts\embed_knowledge_chunks.py
 python -m cortex_rag build-vector-store --with-graph
+python -m cortex_rag verify-index
 ```
 
 That produces the main runtime artifacts:
@@ -144,7 +148,7 @@ There are currently no frontend automated tests. For UI changes, also run a fron
 ```text
 CortexRAG/
 |-- data/
-|   |-- raw/              # Source Confluence exports
+|   |-- raw/              # Source Zotero exports and Obsidian vault copies
 |   |-- processed/        # Markdown pages
 |   `-- chunks/           # Retrieval-ready chunk JSONL
 |-- docs/                 # Project documentation

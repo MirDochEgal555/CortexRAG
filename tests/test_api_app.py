@@ -48,7 +48,7 @@ def test_health_endpoint_returns_ok(monkeypatch) -> None:
 
     warmed: list[tuple[str, object]] = []
 
-    def fake_warm_ui_runtime_assets(*, persist_dir=None, collection_name="confluence") -> None:
+    def fake_warm_ui_runtime_assets(*, persist_dir=None, collection_name="knowledge") -> None:
         warmed.append((collection_name, persist_dir))
 
     monkeypatch.setattr(api_app, "_WARMED_UI_RUNTIME_KEYS", set())
@@ -60,7 +60,7 @@ def test_health_endpoint_returns_ok(monkeypatch) -> None:
     assert response.status_code == 200
     assert response.json() == {"status": "ok", "service": "cortex_rag"}
     assert len(warmed) == 1
-    assert warmed[0][0] == "confluence"
+    assert warmed[0][0] == "knowledge"
 
 
 @pytest.mark.skipif(not (_has_fastapi() and _has_httpx()), reason="FastAPI test dependencies are not installed.")
@@ -84,7 +84,7 @@ def test_search_endpoint_serializes_results(monkeypatch) -> None:
 
     warmed: list[tuple[str, object]] = []
 
-    def fake_warm_ui_runtime_assets(*, persist_dir=None, collection_name="confluence") -> None:
+    def fake_warm_ui_runtime_assets(*, persist_dir=None, collection_name="knowledge") -> None:
         warmed.append((collection_name, persist_dir))
 
     monkeypatch.setattr(api_app, "_WARMED_UI_RUNTIME_KEYS", set())
@@ -108,7 +108,7 @@ def test_search_endpoint_serializes_results(monkeypatch) -> None:
         ],
     }
     assert len(warmed) == 1
-    assert warmed[0][0] == "confluence"
+    assert warmed[0][0] == "knowledge"
 
 
 @pytest.mark.skipif(not (_has_fastapi() and _has_httpx()), reason="FastAPI test dependencies are not installed.")
@@ -127,7 +127,7 @@ def test_answer_endpoint_serializes_grounded_answer(monkeypatch) -> None:
             answer_mode="normal",
             prompt_path=Path("prompts/confluence_rag.md"),
             backend="chroma",
-            collection_name="confluence",
+            collection_name="knowledge",
             sources=[
                 SearchResult(
                     chunk_id="overview-3178688:001",
@@ -200,9 +200,9 @@ def test_graph_neighborhood_endpoint_returns_nodes_and_edges(monkeypatch) -> Non
         ]
 
     def fake_load_graph(*, persist_dir, collection_name):
-        assert collection_name == "confluence"
+        assert collection_name == "knowledge"
         return GraphArtifact(
-            collection_name="confluence",
+            collection_name="knowledge",
             document_node_count=1,
             chunk_node_count=2,
             belongs_to_edge_count=2,

@@ -25,9 +25,9 @@ def test_answer_confluence_question_returns_structured_payload(monkeypatch) -> N
 
     def fake_embed_query(question: str, **kwargs: object):
         assert question == "What changed?"
-        assert kwargs["collection_name"] == "confluence"
+        assert kwargs["collection_name"] == "knowledge"
         assert kwargs["persist_dir"] == Path("storage/chroma")
-        return [0.2, 0.8], SimpleNamespace(collection_name="confluence", backend="chroma")
+        return [0.2, 0.8], SimpleNamespace(collection_name="knowledge", backend="chroma")
 
     def fake_retrieve_by_embedding(question: str, embedding: list[float], **kwargs: object) -> list[SearchResult]:
         assert question == "What changed?"
@@ -89,7 +89,7 @@ def test_answer_confluence_question_returns_structured_payload(monkeypatch) -> N
     assert result.question == "What changed?"
     assert result.answer_mode == "technical"
     assert result.backend == "chroma"
-    assert result.collection_name == "confluence"
+    assert result.collection_name == "knowledge"
     assert result.answer == "Grounded answer."
     assert result.model == "llama3.2:3b"
     assert result.generated is True
@@ -120,7 +120,7 @@ def test_answer_confluence_question_skips_generation_without_context(monkeypatch
     monkeypatch.setattr(
         answering,
         "embed_confluence_query",
-        lambda *args, **kwargs: ([0.2, 0.8], SimpleNamespace(collection_name="confluence", backend="faiss")),
+        lambda *args, **kwargs: ([0.2, 0.8], SimpleNamespace(collection_name="knowledge", backend="faiss")),
     )
     monkeypatch.setattr(answering, "retrieve_confluence_context_by_embedding", lambda *args, **kwargs: [])
     monkeypatch.setattr(

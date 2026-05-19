@@ -11,7 +11,7 @@ The UI is a local graph-first interface over the existing RAG pipeline. It depen
 - the FastAPI backend
 - the React frontend
 
-For the full ingestion and build pipeline, see [confluence-workflow.md](./confluence-workflow.md) and [confluence-script-order.md](./confluence-script-order.md).
+For the full Zotero/Obsidian ingestion and build pipeline, see [zotero-obsidian-ingestion.md](./zotero-obsidian-ingestion.md).
 
 ## Prerequisites
 
@@ -34,10 +34,16 @@ cd frontend
 npm install
 ```
 
-The UI also needs a built retrieval corpus. If you have not built one yet, run the Confluence pipeline first, then build the vector store and graph:
+The UI also needs a built retrieval corpus. If you have not built one yet, run the Zotero/Obsidian pipeline first, then build the vector store and graph:
 
 ```powershell
+python scripts\preprocess_obsidian_vault.py
+python scripts\preprocess_zotero_export.py
+python scripts\chunk_obsidian_notes.py
+python scripts\chunk_zotero_items.py
+python scripts\embed_knowledge_chunks.py
 python -m cortex_rag build-vector-store --with-graph
+python -m cortex_rag verify-index
 ```
 
 If the vector store already exists, rebuilding only the graph is enough:

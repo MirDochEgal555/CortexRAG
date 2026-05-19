@@ -18,7 +18,7 @@ This guide is therefore focused on a pragmatic first deployment, not an aspirati
 
 The repository already supports a production-style read-only query service with:
 
-- Confluence preprocessing and indexing offline
+- Zotero/Obsidian preprocessing and indexing offline
 - persistent vector-store artifacts
 - persistent graph artifacts for the UI
 - a FastAPI backend exposing `GET /health`, `POST /search`, `POST /answer`, and `POST /graph/neighborhood`
@@ -239,10 +239,13 @@ If the browser UI is deployed, the graph artifact is mandatory because `/graph/n
 From the repo root:
 
 ```bash
-python scripts/preprocess_confluence_exports.py
-python scripts/chunk_confluence_exports.py
-python scripts/embed_confluence_chunks.py
+python scripts/preprocess_obsidian_vault.py
+python scripts/preprocess_zotero_export.py
+python scripts/chunk_obsidian_notes.py
+python scripts/chunk_zotero_items.py
+python scripts/embed_knowledge_chunks.py
 python -m cortex_rag build-vector-store --with-graph
+python -m cortex_rag verify-index
 ```
 
 If production should stay read-only, do this in CI or in a staging build environment and ship the resulting `data/` and `storage/` contents with the deployment.

@@ -21,6 +21,7 @@ from cortex_rag.retrieval.embedding_utils import TextEncoder, encode_texts, load
 VectorBackend = Literal["auto", "chroma", "faiss"]
 ResolvedBackend = Literal["chroma", "faiss"]
 CONFLUENCE_EMBEDDINGS_DIR = EMBEDDINGS_DIR / "confluence"
+KNOWLEDGE_EMBEDDINGS_DIR = EMBEDDINGS_DIR / "knowledge"
 _NORMALIZE_TEXT_PATTERN = re.compile(r"[^a-z0-9]+")
 _QUERY_STOPWORDS = {
     "a",
@@ -87,6 +88,18 @@ class VectorStoreManifest:
     embedding_dimensions: int
     embedding_model: str
     distance_metric: str = "cosine"
+
+
+@dataclass(frozen=True)
+class VectorStoreArtifactStatus:
+    """Verified state of persisted vector-store artifacts."""
+
+    backend: ResolvedBackend
+    collection_name: str
+    persist_dir: Path
+    document_count: int
+    embedding_model: str
+    manifest_path: Path
 
 
 @dataclass(frozen=True)
@@ -180,6 +193,34 @@ def build_confluence_vector_store(
     backend: VectorBackend = "auto",
 ) -> VectorStoreBuildResult:
     """Build a persistent vector store from embedding-enriched Confluence chunk files."""
+
+    records = _load_embedding_records(input_dir)
+    manifest = _build_vector_store_from_records(
+        records,
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        backend=backend,
+    )
+
+    return VectorStoreBuildResult(
+        backend=manifest.backend,
+        collection_name=manifest.collection_name,
+        persist_dir=persist_dir,
+        document_count=manifest.document_count,
+        embedding_dimensions=manifest.embedding_dimensions,
+        embedding_model=manifest.embedding_model,
+        distance_metric=manifest.distance_metric,
+    )
+
+
+def build_knowledge_vector_store(
+    input_dir: Path = KNOWLEDGE_EMBEDDINGS_DIR,
+    persist_dir: Path = VECTOR_DB_DIR,
+    *,
+    collection_name: str = DEFAULT_VECTOR_COLLECTION,
+    backend: VectorBackend = "auto",
+) -> VectorStoreBuildResult:
+    """Build a persistent vector store from embedded Zotero and Obsidian chunks."""
 
     records = _load_embedding_records(input_dir)
     manifest = _build_vector_store_from_records(
@@ -389,6 +430,47 @@ def load_vector_store_manifest(
     return manifest
 
 
+def verify_vector_store_artifacts(
+    *,
+    persist_dir: Path = VECTOR_DB_DIR,
+    collection_name: str = DEFAULT_VECTOR_COLLECTION,
+    backend: VectorBackend = "auto",
+) -> VectorStoreArtifactStatus:
+    """Verify that the manifest and backend-specific vector-store files exist."""
+
+    manifest = load_vector_store_manifest(
+        persist_dir=persist_dir,
+        collection_name=collection_name,
+        backend=backend,
+    )
+
+    if manifest.backend == "chroma":
+        stored_count = _count_chroma_collection(
+            persist_dir=persist_dir,
+            collection_name=collection_name,
+        )
+    else:
+        stored_count = _count_faiss_records(
+            persist_dir=persist_dir,
+            collection_name=collection_name,
+        )
+
+    if stored_count != manifest.document_count:
+        raise ValueError(
+            "Vector store artifact count does not match the manifest: "
+            f"{stored_count} != {manifest.document_count}."
+        )
+
+    return VectorStoreArtifactStatus(
+        backend=manifest.backend,
+        collection_name=manifest.collection_name,
+        persist_dir=persist_dir,
+        document_count=manifest.document_count,
+        embedding_model=manifest.embedding_model,
+        manifest_path=_manifest_path(persist_dir, collection_name),
+    )
+
+
 def _build_vector_store_from_records(
     records: list[dict[str, Any]],
     *,
@@ -544,6 +626,17 @@ def _query_chroma_collection(
     return results
 
 
+def _count_chroma_collection(
+    *,
+    persist_dir: Path,
+    collection_name: str,
+) -> int:
+    chromadb = _require_chroma()
+    client = chromadb.PersistentClient(path=str(persist_dir))
+    collection = client.get_collection(name=collection_name)
+    return int(collection.count())
+
+
 def _build_faiss_index(
     records: list[dict[str, Any]],
     *,
@@ -597,6 +690,29 @@ def _query_faiss_index(
         )
 
     return results
+
+
+def _count_faiss_records(
+    *,
+    persist_dir: Path,
+    collection_name: str,
+) -> int:
+    faiss = _require_faiss()
+    index_path = _faiss_index_path(persist_dir, collection_name)
+    records_path = _faiss_records_path(persist_dir, collection_name)
+    if not index_path.exists():
+        raise FileNotFoundError(f"FAISS index file does not exist: {index_path}")
+    if not records_path.exists():
+        raise FileNotFoundError(f"FAISS record file does not exist: {records_path}")
+
+    index = faiss.read_index(str(index_path))
+    records = _load_faiss_records(records_path)
+    if int(index.ntotal) != len(records):
+        raise ValueError(
+            "FAISS index count does not match its record file: "
+            f"{int(index.ntotal)} != {len(records)}."
+        )
+    return len(records)
 
 
 def _coerce_embedding(value: object) -> list[float]:

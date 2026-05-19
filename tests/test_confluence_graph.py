@@ -112,6 +112,57 @@ def test_build_confluence_graph_persists_document_chunk_and_similarity_edges(tmp
     assert similarity_edge.metadata["shared_metadata"] == ["same source (confluence)", "same space (ASA)"]
 
 
+def test_build_confluence_graph_prefers_document_id_for_source_neutral_chunks(tmp_path: Path) -> None:
+    embeddings_dir = tmp_path / "embeddings" / "knowledge" / "zotero"
+    persist_dir = tmp_path / "vector-db"
+    embeddings_dir.mkdir(parents=True)
+
+    _write_embedding_records(
+        embeddings_dir / "paper.jsonl",
+        [
+            {
+                "chunk_id": "zotero::doe2024rag:001",
+                "document_id": "zotero::doe2024rag",
+                "page": "RAG for Knowledge Work",
+                "section": "Notes",
+                "text": "Zotero annotation text.",
+                "source": "zotero",
+                "source_path": "library.bib",
+                "word_count": 12,
+                "embedding_model": "fake-embedding-model",
+                "embedding_dimensions": 2,
+                "embedding": [1.0, 0.0],
+            },
+            {
+                "chunk_id": "zotero::doe2024rag:002",
+                "document_id": "zotero::doe2024rag",
+                "page": "RAG for Knowledge Work",
+                "section": "Bibliography",
+                "text": "Bibliographic metadata text.",
+                "source": "zotero",
+                "source_path": "library.bib",
+                "word_count": 8,
+                "embedding_model": "fake-embedding-model",
+                "embedding_dimensions": 2,
+                "embedding": [0.9, 0.1],
+            },
+        ],
+    )
+
+    build_confluence_graph(
+        input_dir=embeddings_dir.parent,
+        persist_dir=persist_dir,
+        collection_name="knowledge",
+        similarity_top_k=1,
+        similarity_threshold=0.7,
+    )
+
+    graph = load_confluence_graph(persist_dir=persist_dir, collection_name="knowledge")
+
+    assert graph.document_node_count == 1
+    assert any(node.id == "document::zotero::doe2024rag" for node in graph.nodes)
+
+
 def test_build_graph_neighborhood_expands_seed_chunks_to_documents_and_similar_neighbors(tmp_path: Path) -> None:
     embeddings_dir = tmp_path / "embeddings" / "confluence" / "ASA"
     persist_dir = tmp_path / "vector-db"

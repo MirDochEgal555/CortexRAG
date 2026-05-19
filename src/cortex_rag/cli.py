@@ -17,10 +17,11 @@ from cortex_rag.config import (
     VECTOR_DB_DIR,
 )
 from cortex_rag.generation import answer_confluence_question
-from cortex_rag.graph import build_confluence_graph
+from cortex_rag.graph import build_knowledge_graph
+from cortex_rag.index_status import verify_current_searchable_index
 from cortex_rag.retrieval import (
     SearchResult,
-    build_confluence_vector_store,
+    build_knowledge_vector_store,
     retrieve_confluence_context,
 )
 
@@ -33,7 +34,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     build_parser = subparsers.add_parser(
         "build-vector-store",
-        help="Build or replace the persistent Confluence vector store.",
+        help="Build or replace the persistent Zotero/Obsidian knowledge vector store.",
     )
     build_parser.add_argument(
         "--backend",
@@ -73,7 +74,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     graph_parser = subparsers.add_parser(
         "build-graph",
-        help="Build or replace the persisted document/chunk graph artifact for the UI backend.",
+        help="Build or replace the persisted Zotero/Obsidian document/chunk graph artifact for the UI backend.",
     )
     graph_parser.add_argument(
         "--collection",
@@ -100,9 +101,32 @@ def build_parser() -> argparse.ArgumentParser:
     )
     graph_parser.set_defaults(handler=_run_build_graph)
 
+    verify_parser = subparsers.add_parser(
+        "verify-index",
+        help="Verify the current Zotero/Obsidian vector store and graph artifacts required by the UI.",
+    )
+    verify_parser.add_argument(
+        "--backend",
+        choices=("auto", "chroma", "faiss"),
+        default="auto",
+        help="Vector store backend. Defaults to the built backend recorded in the manifest.",
+    )
+    verify_parser.add_argument(
+        "--collection",
+        default=DEFAULT_VECTOR_COLLECTION,
+        help="Collection name to verify.",
+    )
+    verify_parser.add_argument(
+        "--persist-dir",
+        type=Path,
+        default=VECTOR_DB_DIR,
+        help="Directory where the vector store and graph files are persisted.",
+    )
+    verify_parser.set_defaults(handler=_run_verify_index)
+
     search_parser = subparsers.add_parser(
         "similarity-search",
-        help="Retrieve, rerank, deduplicate, and return context-ready Confluence chunks.",
+        help="Retrieve, rerank, deduplicate, and return context-ready knowledge chunks.",
     )
     search_parser.add_argument(
         "query",
@@ -157,9 +181,9 @@ def build_parser() -> argparse.ArgumentParser:
 
     ask_parser = subparsers.add_parser(
         "ask",
-        help="Retrieve Confluence context and generate a grounded answer with Ollama.",
+        help="Retrieve Zotero/Obsidian context and generate a grounded answer with Ollama.",
     )
-    ask_parser.add_argument("query", help="Question to answer from the Confluence vector store.")
+    ask_parser.add_argument("query", help="Question to answer from the knowledge vector store.")
     ask_parser.add_argument(
         "--candidate-k",
         type=int,
@@ -264,7 +288,7 @@ def main(argv: list[str] | None = None) -> None:
 
 
 def _run_build_vector_store(args: argparse.Namespace) -> None:
-    result = build_confluence_vector_store(
+    result = build_knowledge_vector_store(
         persist_dir=args.output_dir,
         collection_name=args.collection,
         backend=args.backend,
@@ -274,7 +298,7 @@ def _run_build_vector_store(args: argparse.Namespace) -> None:
         f"with {result.document_count} chunks at {result.persist_dir}."
     )
     if args.with_graph:
-        graph_result = build_confluence_graph(
+        graph_result = build_knowledge_graph(
             persist_dir=args.output_dir,
             collection_name=args.collection,
             similarity_top_k=args.graph_similarity_top_k,
@@ -287,7 +311,7 @@ def _run_build_vector_store(args: argparse.Namespace) -> None:
 
 
 def _run_build_graph(args: argparse.Namespace) -> None:
-    result = build_confluence_graph(
+    result = build_knowledge_graph(
         persist_dir=args.output_dir,
         collection_name=args.collection,
         similarity_top_k=args.similarity_top_k,
@@ -297,6 +321,22 @@ def _run_build_graph(args: argparse.Namespace) -> None:
         f"Built graph '{result.collection_name}' with {result.node_count} nodes "
         f"and {result.edge_count} edges at {result.persist_path}."
     )
+
+
+def _run_verify_index(args: argparse.Namespace) -> None:
+    status = verify_current_searchable_index(
+        persist_dir=args.persist_dir,
+        collection_name=args.collection,
+        backend=args.backend,
+    )
+    print(
+        f"Verified {status.backend} searchable index '{status.collection_name}' "
+        f"with {status.document_count} chunks at {status.persist_dir}."
+    )
+    print(f"Embedding model: {status.embedding_model}")
+    print(f"Manifest: {status.manifest_path}")
+    print(f"Graph: {status.graph_path}")
+    print(f"Graph payload: {status.graph_node_count} nodes, {status.graph_edge_count} edges.")
 
 
 def _run_similarity_search(args: argparse.Namespace) -> None:

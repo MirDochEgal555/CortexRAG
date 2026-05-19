@@ -4,12 +4,13 @@
 
 This is the operator workflow for the current Zotero and Obsidian ingestion support in CortexRAG.
 
-The implemented scope is ingest only:
+The implemented scope is the Zotero/Obsidian knowledge index:
 
 - read copied/exported source files
 - normalize them into Markdown under `data/processed/`
 - chunk them into retrieval-ready JSONL under `data/chunks/`
-- preserve source metadata for later embedding, vector-store, graph, and UI work
+- embed those chunks under `storage/embeddings/knowledge/`
+- build the default `knowledge` vector store and graph used by the UI
 
 The ingestion code does not write back to Zotero, Obsidian, a live vault, or the Zotero SQLite database.
 
@@ -31,6 +32,14 @@ python scripts/preprocess_zotero_export.py --input data/raw/zotero/library.bib
 python scripts/chunk_zotero_items.py
 ```
 
+Knowledge index:
+
+```bash
+python scripts/embed_knowledge_chunks.py
+python -m cortex_rag build-vector-store --with-graph
+python -m cortex_rag verify-index
+```
+
 The project requires Python `>=3.11`. If your local environment exposes that as `python3`, use `python3` in the commands.
 
 ## Data Flow
@@ -41,48 +50,35 @@ The implemented ingestion path is:
 data/raw/obsidian/<vault-name>/
   -> data/processed/obsidian/<vault-name>/
   -> data/chunks/obsidian/<vault-name>/
+  -> storage/embeddings/knowledge/obsidian/<vault-name>/
 
 data/raw/zotero/library.bib
 data/raw/zotero/notes/
 data/raw/zotero/attachments/
   -> data/processed/zotero/
   -> data/chunks/zotero/
+  -> storage/embeddings/knowledge/zotero/
 ```
 
-These outputs are source-parallel to the existing Confluence layout:
+The runtime search artifacts are:
 
 ```text
-data/
-  raw/
-    confluence/
-    obsidian/
-    zotero/
-  processed/
-    confluence/
-    obsidian/
-    zotero/
-  chunks/
-    confluence/
-    obsidian/
-    zotero/
+storage/chroma/knowledge.manifest.json
+storage/chroma/knowledge.graph.json
+storage/chroma/<backend-specific vector files>
 ```
 
 ## What Is Not Implemented Yet
 
-The current Zotero and Obsidian work stops after chunk generation.
+Zotero and Obsidian are now searchable through the default mixed `knowledge` collection.
 
 Not included yet:
 
-- generic `scripts/embed_chunks.py`
-- embedding Obsidian or Zotero chunks
-- building source-specific Obsidian or Zotero vector collections
-- building a mixed `knowledge` collection
 - source filters in the UI
+- separate source-specific Obsidian or Zotero vector collections
 - Zotero PDF text extraction
 - Zotero writeback
 - Obsidian writeback
-
-For now, the downstream Confluence embedding and vector-store pipeline remains unchanged.
 
 ## Chunk Record Contract
 
@@ -387,7 +383,18 @@ python scripts/preprocess_zotero_export.py --input data/raw/zotero/library.bib
 
 python scripts/chunk_obsidian_notes.py
 python scripts/chunk_zotero_items.py
+
+python scripts/embed_knowledge_chunks.py
+python -m cortex_rag build-vector-store --with-graph
+python -m cortex_rag verify-index
 ```
+
+That produces the default mixed-source runtime artifacts:
+
+- `storage/embeddings/knowledge/`
+- `storage/chroma/knowledge.manifest.json`
+- backend-specific vector-store files under `storage/chroma/`
+- `storage/chroma/knowledge.graph.json`
 
 For multiple Obsidian vault directories under `data/raw/obsidian/`, omit `--vault`:
 
@@ -410,6 +417,13 @@ After chunking, check that JSONL chunks exist:
 ```bash
 find data/chunks/obsidian -name '*.jsonl' | head
 find data/chunks/zotero -name '*.jsonl' | head
+```
+
+After embedding and indexing, verify the searchable artifacts:
+
+```bash
+find storage/embeddings/knowledge -name '*.jsonl' | head
+python -m cortex_rag verify-index
 ```
 
 Inspect one chunk record:
@@ -452,7 +466,9 @@ Run Zotero chunking again after:
 - Zotero preprocessing
 - manual edits to `data/processed/zotero/`
 
-Because the adapters are ingest-only, rebuilding is safe for the original sources. Rebuilds overwrite generated files under `data/processed/...` and `data/chunks/...`.
+Run `scripts/embed_knowledge_chunks.py` and `python -m cortex_rag build-vector-store --with-graph` again after any Zotero or Obsidian chunks change.
+
+Because the adapters are ingest-only, rebuilding is safe for the original sources. Rebuilds overwrite generated files under `data/processed/...`, `data/chunks/...`, `storage/embeddings/knowledge/`, and the selected vector-store collection under `storage/chroma/`.
 
 ## Troubleshooting
 
@@ -476,6 +492,6 @@ If Zotero notes are missing:
 
 If downstream search does not include Zotero or Obsidian:
 
-- that is expected in the current implementation
-- only ingestion and chunk generation are implemented for these sources
-- generic embeddings and mixed-source vector-store support still need to be added
+- confirm `python scripts/embed_knowledge_chunks.py` wrote files under `storage/embeddings/knowledge/`
+- confirm `python -m cortex_rag build-vector-store --with-graph` built the `knowledge` collection
+- confirm `python -m cortex_rag verify-index` passes

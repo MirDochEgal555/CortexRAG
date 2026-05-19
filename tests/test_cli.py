@@ -14,6 +14,7 @@ if str(SRC_DIR) not in sys.path:
 from cortex_rag import cli
 from cortex_rag.generation import AnswerTimings, ConfluenceAnswerResult, GenerationResult
 from cortex_rag.graph import GraphBuildResult
+from cortex_rag.index_status import SearchableIndexStatus
 from cortex_rag.retrieval import SearchResult
 
 
@@ -87,7 +88,7 @@ def test_ask_cli_formats_answer_sources_and_timings(
             answer_mode="normal",
             prompt_path=Path("prompts/confluence_rag.md"),
             backend="chroma",
-            collection_name="confluence",
+            collection_name="knowledge",
             sources=[
                 SearchResult(
                     chunk_id="overview-3178688:001",
@@ -146,7 +147,7 @@ def test_ask_cli_skips_generation_output_when_no_context(
             answer_mode="normal",
             prompt_path=Path("prompts/confluence_rag.md"),
             backend="chroma",
-            collection_name="confluence",
+            collection_name="knowledge",
             sources=[],
             messages=[],
             generation=None,
@@ -179,12 +180,12 @@ def test_build_graph_cli_prints_summary(
     capsys,
 ) -> None:
     def fake_build_graph(**kwargs: object) -> GraphBuildResult:
-        assert kwargs["collection_name"] == "confluence"
+        assert kwargs["collection_name"] == "knowledge"
         assert kwargs["similarity_top_k"] == 2
         assert kwargs["similarity_threshold"] == 0.7
         return GraphBuildResult(
-            collection_name="confluence",
-            persist_path=Path("storage/chroma/confluence.graph.json"),
+            collection_name="knowledge",
+            persist_path=Path("storage/chroma/knowledge.graph.json"),
             document_node_count=2,
             chunk_node_count=3,
             belongs_to_edge_count=3,
@@ -193,12 +194,12 @@ def test_build_graph_cli_prints_summary(
             similarity_threshold=0.7,
         )
 
-    monkeypatch.setattr(cli, "build_confluence_graph", fake_build_graph)
+    monkeypatch.setattr(cli, "build_knowledge_graph", fake_build_graph)
 
     cli.main(["build-graph", "--similarity-top-k", "2", "--similarity-threshold", "0.7"])
 
     assert capsys.readouterr().out.splitlines() == [
-        "Built graph 'confluence' with 5 nodes and 4 edges at storage\\chroma\\confluence.graph.json.",
+        "Built graph 'knowledge' with 5 nodes and 4 edges at storage\\chroma\\knowledge.graph.json.",
     ]
 
 
@@ -208,21 +209,21 @@ def test_build_vector_store_cli_can_also_build_graph(
 ) -> None:
     class FakeVectorStoreBuildResult:
         backend = "chroma"
-        collection_name = "confluence"
+        collection_name = "knowledge"
         document_count = 3
         persist_dir = Path("storage/chroma")
 
     def fake_build_vector_store(**kwargs: object) -> FakeVectorStoreBuildResult:
-        assert kwargs["collection_name"] == "confluence"
+        assert kwargs["collection_name"] == "knowledge"
         return FakeVectorStoreBuildResult()
 
     def fake_build_graph(**kwargs: object) -> GraphBuildResult:
-        assert kwargs["collection_name"] == "confluence"
+        assert kwargs["collection_name"] == "knowledge"
         assert kwargs["similarity_top_k"] == 4
         assert kwargs["similarity_threshold"] == 0.8
         return GraphBuildResult(
-            collection_name="confluence",
-            persist_path=Path("storage/chroma/confluence.graph.json"),
+            collection_name="knowledge",
+            persist_path=Path("storage/chroma/knowledge.graph.json"),
             document_node_count=2,
             chunk_node_count=3,
             belongs_to_edge_count=3,
@@ -231,8 +232,8 @@ def test_build_vector_store_cli_can_also_build_graph(
             similarity_threshold=0.8,
         )
 
-    monkeypatch.setattr(cli, "build_confluence_vector_store", fake_build_vector_store)
-    monkeypatch.setattr(cli, "build_confluence_graph", fake_build_graph)
+    monkeypatch.setattr(cli, "build_knowledge_vector_store", fake_build_vector_store)
+    monkeypatch.setattr(cli, "build_knowledge_graph", fake_build_graph)
 
     cli.main(
         [
@@ -246,6 +247,38 @@ def test_build_vector_store_cli_can_also_build_graph(
     )
 
     assert capsys.readouterr().out.splitlines() == [
-        "Built chroma vector store 'confluence' with 3 chunks at storage\\chroma.",
-        "Built graph 'confluence' with 5 nodes and 5 edges at storage\\chroma\\confluence.graph.json.",
+        "Built chroma vector store 'knowledge' with 3 chunks at storage\\chroma.",
+        "Built graph 'knowledge' with 5 nodes and 5 edges at storage\\chroma\\knowledge.graph.json.",
+    ]
+
+
+def test_verify_index_cli_prints_current_searchable_index(
+    monkeypatch,
+    capsys,
+) -> None:
+    def fake_verify_index(**kwargs: object) -> SearchableIndexStatus:
+        assert kwargs["collection_name"] == "knowledge"
+        assert kwargs["backend"] == "auto"
+        return SearchableIndexStatus(
+            collection_name="knowledge",
+            persist_dir=Path("storage/chroma"),
+            backend="faiss",
+            document_count=3,
+            embedding_model="fake-embedding-model",
+            graph_node_count=5,
+            graph_edge_count=4,
+            manifest_path=Path("storage/chroma/knowledge.manifest.json"),
+            graph_path=Path("storage/chroma/knowledge.graph.json"),
+        )
+
+    monkeypatch.setattr(cli, "verify_current_searchable_index", fake_verify_index)
+
+    cli.main(["verify-index"])
+
+    assert capsys.readouterr().out.splitlines() == [
+        f"Verified faiss searchable index 'knowledge' with 3 chunks at {Path('storage/chroma')}.",
+        "Embedding model: fake-embedding-model",
+        f"Manifest: {Path('storage/chroma/knowledge.manifest.json')}",
+        f"Graph: {Path('storage/chroma/knowledge.graph.json')}",
+        "Graph payload: 5 nodes, 4 edges.",
     ]
