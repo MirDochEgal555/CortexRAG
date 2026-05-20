@@ -80,6 +80,40 @@ Not included yet:
 - Zotero writeback
 - Obsidian writeback
 
+## Future Improvements: Paper-Specific Retrieval
+
+The current Zotero path makes papers searchable inside the mixed `knowledge` collection, but paper-specific questions should eventually treat one paper as a structured retrieval scope rather than as unrelated chunks in the global index.
+
+Useful future additions:
+
+- paper-scoped retrieval by `document_id`, `citekey`, DOI, title, or Zotero item key
+- UI and API filters that can constrain a question to one selected paper
+- an `ask-paper` style CLI command for targeted questions against one Zotero item
+- Zotero PDF text extraction from matched attachments
+- section-aware paper chunking for abstract, introduction, methods, experiments, results, discussion, limitations, and conclusion
+- page-aware chunk metadata when PDF extraction provides reliable page numbers
+- exact metadata lookup before semantic retrieval for authors, year, DOI, venue, tags, citekey, and attachment paths
+- generated per-paper reading cards with title, abstract, main claim, method, datasets, findings, limitations, useful source spans, and related notes
+
+The intended workflow is:
+
+```text
+select paper by citekey/title/DOI
+  -> retrieve only chunks and metadata for that paper
+  -> answer from paper-local evidence
+  -> show supporting sections, pages, notes, and metadata
+```
+
+This would support questions such as:
+
+- "What is the main contribution of this paper?"
+- "Which dataset did they evaluate on?"
+- "What method do they propose?"
+- "Where do they discuss limitations?"
+- "Summarize only the results section."
+
+Implementation should start with paper-scoped filters before adding new extraction or summarization layers. The smallest useful version is metadata/document filtering over the existing Zotero chunks.
+
 ## Chunk Record Contract
 
 Both adapters emit JSONL records with the shared core fields expected by the future source-neutral pipeline:
