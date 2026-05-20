@@ -112,6 +112,32 @@ class SearchResult:
     metadata: dict[str, Any]
 
 
+@dataclass(frozen=True)
+class SearchFilters:
+    """Optional metadata constraints applied before reranking retrieval results."""
+
+    source: str | None = None
+    document_id: str | None = None
+    citekey: str | None = None
+    doi: str | None = None
+    title: str | None = None
+    zotero_key: str | None = None
+
+    @property
+    def active(self) -> bool:
+        return any(
+            value not in (None, "")
+            for value in (
+                self.source,
+                self.document_id,
+                self.citekey,
+                self.doi,
+                self.title,
+                self.zotero_key,
+            )
+        )
+
+
 def retrieve_confluence_context(
     query_text: str,
     *,
@@ -126,6 +152,7 @@ def retrieve_confluence_context(
     device: str | None = None,
     encoder: TextEncoder | None = None,
     min_score: float | None = None,
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
     """Retrieve a smaller, context-ready set of chunks for generation prep."""
 
@@ -149,6 +176,7 @@ def retrieve_confluence_context(
         collection_name=collection_name,
         backend=manifest.backend,
         min_score=min_score,
+        filters=filters,
     )
 
 
@@ -162,6 +190,7 @@ def retrieve_confluence_context_by_embedding(
     collection_name: str = DEFAULT_VECTOR_COLLECTION,
     backend: VectorBackend = "auto",
     min_score: float | None = None,
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
     """Retrieve, rerank, deduplicate, and trim search results for downstream use."""
 
@@ -177,6 +206,7 @@ def retrieve_confluence_context_by_embedding(
         collection_name=collection_name,
         backend=backend,
         min_score=min_score,
+        filters=filters,
     )
     return _rerank_and_trim_results(
         query_text,
@@ -253,6 +283,7 @@ def query_confluence_vector_store(
     normalize_embeddings: bool = True,
     device: str | None = None,
     encoder: TextEncoder | None = None,
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
     """Backward-compatible alias for similarity_search_confluence_vector_store."""
 
@@ -267,6 +298,7 @@ def query_confluence_vector_store(
         normalize_embeddings=normalize_embeddings,
         device=device,
         encoder=encoder,
+        filters=filters,
     )
 
 
@@ -283,6 +315,7 @@ def similarity_search_confluence_vector_store(
     device: str | None = None,
     encoder: TextEncoder | None = None,
     min_score: float | None = None,
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
     """Run similarity search against the persistent Confluence vector store."""
 
@@ -304,6 +337,7 @@ def similarity_search_confluence_vector_store(
         collection_name=collection_name,
         backend=manifest.backend,
         min_score=min_score,
+        filters=filters,
     )
 
 
@@ -344,6 +378,7 @@ def search_confluence_vector_store_by_embedding(
     persist_dir: Path = VECTOR_DB_DIR,
     collection_name: str = DEFAULT_VECTOR_COLLECTION,
     backend: VectorBackend = "auto",
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
     """Backward-compatible alias for similarity_search_confluence_vector_store_by_embedding."""
 
@@ -353,6 +388,7 @@ def search_confluence_vector_store_by_embedding(
         persist_dir=persist_dir,
         collection_name=collection_name,
         backend=backend,
+        filters=filters,
     )
 
 
@@ -364,6 +400,7 @@ def similarity_search_confluence_vector_store_by_embedding(
     collection_name: str = DEFAULT_VECTOR_COLLECTION,
     backend: VectorBackend = "auto",
     min_score: float | None = None,
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
     """Search the persistent vector store using a precomputed query embedding."""
 
@@ -384,19 +421,20 @@ def similarity_search_confluence_vector_store_by_embedding(
     if manifest.backend == "chroma":
         results = _query_chroma_collection(
             query_embedding,
-            top_k=top_k,
+            top_k=_effective_top_k(top_k, filters=filters, persist_dir=persist_dir, collection_name=collection_name),
             persist_dir=persist_dir,
             collection_name=collection_name,
         )
     else:
         results = _query_faiss_index(
             query_embedding,
-            top_k=top_k,
+            top_k=_effective_top_k(top_k, filters=filters, persist_dir=persist_dir, collection_name=collection_name),
             persist_dir=persist_dir,
             collection_name=collection_name,
         )
 
-    return _filter_search_results(results, min_score=min_score)
+    filtered_results = _filter_search_results(results, min_score=min_score, filters=filters)
+    return filtered_results[:top_k]
 
 
 def load_vector_store_manifest(
@@ -730,8 +768,21 @@ def _coerce_chroma_metadata(record: dict[str, Any]) -> dict[str, str | int | flo
         "payload_json": payload,
     }
 
-    for key in ("page", "section", "space_key", "space_name", "source", "page_type", "source_path"):
-        value = record.get(key)
+    for key in (
+        "page",
+        "section",
+        "space_key",
+        "space_name",
+        "source",
+        "page_type",
+        "source_path",
+        "document_id",
+        "citekey",
+        "doi",
+        "title",
+        "zotero_key",
+    ):
+        value = _record_metadata_value(record, key)
         if value not in (None, ""):
             metadata[key] = str(value)
 
@@ -913,7 +964,7 @@ def _normalize_text(text: str) -> str:
 
 
 def _metadata_text(metadata: dict[str, Any], key: str) -> str:
-    value = metadata.get(key)
+    value = _record_metadata_value(metadata, key)
     return str(value).strip() if value not in (None, "") else ""
 
 
@@ -928,10 +979,73 @@ def _filter_search_results(
     results: list[SearchResult],
     *,
     min_score: float | None,
+    filters: SearchFilters | None = None,
 ) -> list[SearchResult]:
-    if min_score is None:
-        return results
-    return [result for result in results if result.score >= min_score]
+    filtered = results
+    if min_score is not None:
+        filtered = [result for result in filtered if result.score >= min_score]
+    if filters is not None and filters.active:
+        filtered = [result for result in filtered if _matches_search_filters(result, filters)]
+    return filtered
+
+
+def _matches_search_filters(result: SearchResult, filters: SearchFilters) -> bool:
+    metadata = result.metadata
+    if filters.source and _normalize_identifier(_metadata_text(metadata, "source")) != _normalize_identifier(filters.source):
+        return False
+    if filters.document_id and _normalize_identifier(_metadata_text(metadata, "document_id")) != _normalize_identifier(filters.document_id):
+        return False
+    if filters.citekey and _normalize_identifier(_metadata_text(metadata, "citekey")) != _normalize_identifier(filters.citekey):
+        return False
+    if filters.doi and _normalize_doi(_metadata_text(metadata, "doi")) != _normalize_doi(filters.doi):
+        return False
+    if filters.zotero_key and _normalize_identifier(_metadata_text(metadata, "zotero_key")) != _normalize_identifier(filters.zotero_key):
+        return False
+    if filters.title and _normalize_text(filters.title) not in {
+        _normalize_text(_metadata_text(metadata, "title")),
+        _normalize_text(_metadata_text(metadata, "page")),
+    }:
+        return False
+    return True
+
+
+def _record_metadata_value(record: dict[str, Any], key: str) -> Any:
+    value = record.get(key)
+    if value not in (None, ""):
+        return value
+
+    nested_metadata = record.get("metadata")
+    if isinstance(nested_metadata, dict):
+        return nested_metadata.get(key)
+    return None
+
+
+def _normalize_identifier(value: str | None) -> str:
+    return str(value or "").strip().casefold()
+
+
+def _normalize_doi(value: str | None) -> str:
+    normalized = _normalize_identifier(value)
+    for prefix in ("https://doi.org/", "http://doi.org/", "doi:"):
+        if normalized.startswith(prefix):
+            return normalized.removeprefix(prefix)
+    return normalized
+
+
+def _effective_top_k(
+    top_k: int,
+    *,
+    filters: SearchFilters | None,
+    persist_dir: Path,
+    collection_name: str,
+) -> int:
+    if filters is None or not filters.active:
+        return top_k
+
+    manifest = load_vector_store_manifest(persist_dir=persist_dir, collection_name=collection_name)
+    if manifest.backend == "chroma":
+        return max(top_k, _count_chroma_collection(persist_dir=persist_dir, collection_name=collection_name))
+    return max(top_k, _count_faiss_records(persist_dir=persist_dir, collection_name=collection_name))
 
 
 def _batched(records: list[dict[str, Any]], batch_size: int) -> list[list[dict[str, Any]]]:

@@ -1,6 +1,17 @@
 export type GraphNodeType = "document" | "chunk";
 export type GraphEdgeType = "belongs_to" | "similar_to";
 export type AnswerMode = "concise" | "normal" | "detailed" | "bullet_summary" | "technical";
+export type SourceScope = "all" | "zotero" | "obsidian";
+
+export interface RetrievalFilters {
+  source?: "zotero" | "obsidian";
+  document_id?: string;
+  citekey?: string;
+  doi?: string;
+  title?: string;
+  zotero_key?: string;
+  min_score?: number;
+}
 
 export interface SearchResultPayload {
   chunk_id: string;

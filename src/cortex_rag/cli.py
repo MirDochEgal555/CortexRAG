@@ -21,6 +21,7 @@ from cortex_rag.graph import build_knowledge_graph
 from cortex_rag.index_status import verify_current_searchable_index
 from cortex_rag.retrieval import (
     SearchResult,
+    SearchFilters,
     build_knowledge_vector_store,
     retrieve_confluence_context,
 )
@@ -150,6 +151,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional minimum similarity score required for a result to be shown.",
     )
+    _add_search_filter_arguments(search_parser)
     search_parser.add_argument(
         "--backend",
         choices=("auto", "chroma", "faiss"),
@@ -202,6 +204,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Optional minimum similarity score required for a chunk to be used.",
     )
+    _add_search_filter_arguments(ask_parser)
     ask_parser.add_argument(
         "--backend",
         choices=("auto", "chroma", "faiss"),
@@ -276,7 +279,106 @@ def build_parser() -> argparse.ArgumentParser:
     )
     ask_parser.set_defaults(handler=_run_ask)
 
+    ask_paper_parser = subparsers.add_parser(
+        "ask-paper",
+        help="Ask a grounded question against one Zotero paper selected by citekey.",
+    )
+    ask_paper_parser.add_argument("citekey", help="Zotero citekey identifying the paper to query.")
+    ask_paper_parser.add_argument("query", help="Question to answer from the selected paper.")
+    ask_paper_parser.add_argument(
+        "--candidate-k",
+        type=int,
+        default=50,
+        help="Number of paper-local candidates to retrieve before reranking.",
+    )
+    ask_paper_parser.add_argument(
+        "--top-k",
+        type=int,
+        default=4,
+        help="Number of reranked paper chunks to include in the prompt.",
+    )
+    ask_paper_parser.add_argument(
+        "--min-score",
+        type=float,
+        default=None,
+        help="Optional minimum similarity score required for a chunk to be used.",
+    )
+    ask_paper_parser.add_argument(
+        "--backend",
+        choices=("auto", "chroma", "faiss"),
+        default="auto",
+        help="Vector store backend. Defaults to the manifest backend when available.",
+    )
+    ask_paper_parser.add_argument(
+        "--collection",
+        default=DEFAULT_VECTOR_COLLECTION,
+        help="Collection name to query.",
+    )
+    ask_paper_parser.add_argument(
+        "--persist-dir",
+        type=Path,
+        default=VECTOR_DB_DIR,
+        help="Directory where the vector store files are persisted.",
+    )
+    ask_paper_parser.add_argument(
+        "--embedding-model",
+        default=None,
+        help="Optional SentenceTransformer model name or local path override for query embedding.",
+    )
+    ask_paper_parser.add_argument(
+        "--device",
+        default=None,
+        help="Optional SentenceTransformer device override, for example cpu or cuda.",
+    )
+    ask_paper_parser.add_argument(
+        "--prompt",
+        type=Path,
+        default=DEFAULT_RAG_PROMPT_PATH,
+        help="Prompt template file used as the system message.",
+    )
+    ask_paper_parser.add_argument(
+        "--mode",
+        choices=("concise", "normal", "detailed", "bullet_summary", "technical"),
+        default=DEFAULT_RAG_ANSWER_MODE,
+        help="Answer style injected into the prompt.",
+    )
+    ask_paper_parser.add_argument("--ollama-host", default=DEFAULT_OLLAMA_HOST, help="Ollama host URL.")
+    ask_paper_parser.add_argument("--ollama-model", default=DEFAULT_OLLAMA_MODEL, help="Ollama model name.")
+    ask_paper_parser.add_argument(
+        "--temperature",
+        type=float,
+        default=DEFAULT_OLLAMA_TEMPERATURE,
+        help="Generation temperature passed to Ollama.",
+    )
+    ask_paper_parser.add_argument(
+        "--num-ctx",
+        type=int,
+        default=min(DEFAULT_OLLAMA_NUM_CTX, 4096),
+        help="Context window passed to Ollama.",
+    )
+    ask_paper_parser.add_argument(
+        "--max-tokens",
+        type=int,
+        default=DEFAULT_OLLAMA_NUM_PREDICT,
+        help="Maximum number of tokens Ollama should generate.",
+    )
+    ask_paper_parser.add_argument(
+        "--stream",
+        action="store_true",
+        help="Stream the answer as tokens arrive and report time to first token.",
+    )
+    ask_paper_parser.set_defaults(handler=_run_ask_paper)
+
     return parser
+
+
+def _add_search_filter_arguments(parser: argparse.ArgumentParser) -> None:
+    parser.add_argument("--source", default=None, help="Optional source filter, for example zotero.")
+    parser.add_argument("--document-id", default=None, help="Optional exact document_id filter.")
+    parser.add_argument("--citekey", default=None, help="Optional Zotero citekey filter.")
+    parser.add_argument("--doi", default=None, help="Optional DOI filter.")
+    parser.add_argument("--title", default=None, help="Optional exact paper title/page filter.")
+    parser.add_argument("--zotero-key", default=None, help="Optional Zotero item key filter.")
 
 
 def main(argv: list[str] | None = None) -> None:
@@ -350,6 +452,7 @@ def _run_similarity_search(args: argparse.Namespace) -> None:
         backend=args.backend,
         model_name=args.model,
         device=args.device,
+        filters=_filters_from_args(args),
     )
     _print_search_results(results)
 
@@ -377,6 +480,7 @@ def _run_ask(args: argparse.Namespace) -> None:
         max_tokens=args.max_tokens,
         stream=args.stream,
         token_callback=_stream_token if args.stream else None,
+        filters=_filters_from_args(args),
     )
 
     if not result.sources:
@@ -397,6 +501,28 @@ def _run_ask(args: argparse.Namespace) -> None:
     _print_search_results(result.sources)
     print()
     _print_timings(result.timings)
+
+
+def _run_ask_paper(args: argparse.Namespace) -> None:
+    args.source = "zotero"
+    args.document_id = None
+    args.citekey = args.citekey
+    args.doi = None
+    args.title = None
+    args.zotero_key = None
+    _run_ask(args)
+
+
+def _filters_from_args(args: argparse.Namespace) -> SearchFilters | None:
+    filters = SearchFilters(
+        source=getattr(args, "source", None),
+        document_id=getattr(args, "document_id", None),
+        citekey=getattr(args, "citekey", None),
+        doi=getattr(args, "doi", None),
+        title=getattr(args, "title", None),
+        zotero_key=getattr(args, "zotero_key", None),
+    )
+    return filters if filters.active else None
 
 
 def _print_search_results(results: list[SearchResult]) -> None:

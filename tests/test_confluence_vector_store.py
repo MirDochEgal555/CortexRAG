@@ -15,6 +15,7 @@ if str(SRC_DIR) not in sys.path:
     sys.path.insert(0, str(SRC_DIR))
 
 from cortex_rag.retrieval.vector_store import (
+    SearchFilters,
     build_confluence_vector_store,
     embed_confluence_query,
     load_vector_store_manifest,
@@ -275,6 +276,111 @@ def test_similarity_search_by_embedding_supports_min_score(tmp_path: Path) -> No
     )
 
     assert [hit.chunk_id for hit in hits] == ["architecture-3309569:001"]
+
+
+def test_similarity_search_by_embedding_can_filter_to_one_zotero_paper(tmp_path: Path) -> None:
+    embeddings_dir = tmp_path / "embeddings" / "knowledge" / "zotero"
+    persist_dir = tmp_path / "vector-db"
+    embeddings_dir.mkdir(parents=True)
+
+    _write_embedding_records(
+        embeddings_dir / "papers.jsonl",
+        [
+            {
+                "chunk_id": "zotero::alpha2024:001",
+                "document_id": "zotero::alpha2024",
+                "source": "zotero",
+                "page": "Alpha Paper",
+                "section": "Methods",
+                "text": "Alpha paper has the closest vector.",
+                "embedding_model": "fake-embedding-model",
+                "embedding_dimensions": 2,
+                "embedding": [1.0, 0.0],
+                "metadata": {"citekey": "alpha2024", "doi": "10.1000/alpha"},
+            },
+            {
+                "chunk_id": "zotero::beta2024:001",
+                "document_id": "zotero::beta2024",
+                "source": "zotero",
+                "page": "Beta Paper",
+                "section": "Results",
+                "text": "Beta paper is the selected paper.",
+                "embedding_model": "fake-embedding-model",
+                "embedding_dimensions": 2,
+                "embedding": [0.8, 0.2],
+                "metadata": {"citekey": "beta2024", "doi": "https://doi.org/10.1000/beta"},
+            },
+            {
+                "chunk_id": "obsidian::main::note:001",
+                "document_id": "obsidian::main::note",
+                "source": "obsidian",
+                "page": "Lab Note",
+                "section": "Summary",
+                "text": "An unrelated note also has a close vector.",
+                "embedding_model": "fake-embedding-model",
+                "embedding_dimensions": 2,
+                "embedding": [0.99, 0.01],
+            },
+        ],
+    )
+
+    build_confluence_vector_store(
+        input_dir=embeddings_dir.parent,
+        persist_dir=persist_dir,
+        collection_name="test-knowledge",
+        backend="auto",
+    )
+
+    hits = similarity_search_confluence_vector_store_by_embedding(
+        [1.0, 0.0],
+        top_k=1,
+        persist_dir=persist_dir,
+        collection_name="test-knowledge",
+        filters=SearchFilters(source="zotero", citekey="beta2024"),
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["zotero::beta2024:001"]
+
+
+def test_similarity_search_by_embedding_can_filter_by_doi_variants(tmp_path: Path) -> None:
+    embeddings_dir = tmp_path / "embeddings" / "knowledge" / "zotero"
+    persist_dir = tmp_path / "vector-db"
+    embeddings_dir.mkdir(parents=True)
+
+    _write_embedding_records(
+        embeddings_dir / "papers.jsonl",
+        [
+            {
+                "chunk_id": "zotero::beta2024:001",
+                "document_id": "zotero::beta2024",
+                "source": "zotero",
+                "page": "Beta Paper",
+                "section": "Results",
+                "text": "Beta paper is the selected paper.",
+                "embedding_model": "fake-embedding-model",
+                "embedding_dimensions": 2,
+                "embedding": [1.0, 0.0],
+                "metadata": {"citekey": "beta2024", "doi": "https://doi.org/10.1000/beta"},
+            }
+        ],
+    )
+
+    build_confluence_vector_store(
+        input_dir=embeddings_dir.parent,
+        persist_dir=persist_dir,
+        collection_name="test-knowledge",
+        backend="auto",
+    )
+
+    hits = similarity_search_confluence_vector_store_by_embedding(
+        [1.0, 0.0],
+        top_k=1,
+        persist_dir=persist_dir,
+        collection_name="test-knowledge",
+        filters=SearchFilters(doi="10.1000/beta"),
+    )
+
+    assert [hit.chunk_id for hit in hits] == ["zotero::beta2024:001"]
 
 
 def test_retrieve_confluence_context_reranks_and_deduplicates(tmp_path: Path) -> None:

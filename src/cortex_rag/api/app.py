@@ -24,6 +24,7 @@ from cortex_rag.generation import answer_confluence_question
 from cortex_rag.graph import build_graph_neighborhood, load_confluence_graph
 from cortex_rag.index_status import verify_current_searchable_index
 from cortex_rag.retrieval import (
+    SearchFilters,
     preload_sentence_transformer,
     retrieve_confluence_context,
 )
@@ -94,6 +95,7 @@ def create_app() -> Any:
                 backend=request.backend,
                 model_name=request.model,
                 device=request.device,
+                filters=_filters_from_request(request),
             )
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -124,6 +126,7 @@ def create_app() -> Any:
                 temperature=request.temperature,
                 num_ctx=request.num_ctx,
                 max_tokens=request.max_tokens,
+                filters=_filters_from_request(request),
             )
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -147,14 +150,17 @@ def create_app() -> Any:
                 backend=request.backend,
                 model_name=request.model,
                 device=request.device,
+                filters=_filters_from_request(request),
             )
             graph = load_confluence_graph(
                 persist_dir=request.persist_dir,
                 collection_name=request.collection,
             )
+            request_filters = _filters_from_request(request)
             neighborhood = build_graph_neighborhood(
                 graph,
                 seed_chunk_ids=[result.chunk_id for result in results],
+                allowed_chunk_ids=[result.chunk_id for result in results] if request_filters else None,
             )
         except Exception as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
@@ -162,3 +168,15 @@ def create_app() -> Any:
         return build_graph_neighborhood_response(request.query, neighborhood)
 
     return app
+
+
+def _filters_from_request(request: SearchRequest | AnswerRequest | GraphNeighborhoodRequest) -> SearchFilters | None:
+    filters = SearchFilters(
+        source=request.source,
+        document_id=request.document_id,
+        citekey=request.citekey,
+        doi=request.doi,
+        title=request.title,
+        zotero_key=request.zotero_key,
+    )
+    return filters if filters.active else None

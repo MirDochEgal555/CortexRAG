@@ -14,6 +14,7 @@ from cortex_rag.retrieval.embedding_utils import (
 )
 from cortex_rag.retrieval.vector_store import (
     SearchResult,
+    SearchFilters,
     VectorBackend,
     VectorStoreArtifactStatus,
     VectorStoreBuildResult,
@@ -32,6 +33,7 @@ from cortex_rag.retrieval.vector_store import (
 
 __all__ = [
     "SearchResult",
+    "SearchFilters",
     "VectorBackend",
     "VectorStoreArtifactStatus",
     "VectorStoreBuildResult",

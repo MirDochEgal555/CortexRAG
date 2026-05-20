@@ -43,6 +43,12 @@ class SearchRequest(APIModel):
     candidate_k: int = Field(default=10, gt=0)
     top_k: int = Field(default=5, gt=0)
     min_score: float | None = None
+    source: str | None = None
+    document_id: str | None = None
+    citekey: str | None = None
+    doi: str | None = None
+    title: str | None = None
+    zotero_key: str | None = None
     backend: BackendName = "auto"
     collection: str = DEFAULT_VECTOR_COLLECTION
     persist_dir: Path = VECTOR_DB_DIR
@@ -76,6 +82,12 @@ class AnswerRequest(APIModel):
     candidate_k: int = Field(default=10, gt=0)
     top_k: int = Field(default=2, gt=0)
     min_score: float | None = None
+    source: str | None = None
+    document_id: str | None = None
+    citekey: str | None = None
+    doi: str | None = None
+    title: str | None = None
+    zotero_key: str | None = None
     backend: BackendName = "auto"
     collection: str = DEFAULT_VECTOR_COLLECTION
     persist_dir: Path = VECTOR_DB_DIR
@@ -127,6 +139,12 @@ class GraphNeighborhoodRequest(APIModel):
     candidate_k: int = Field(default=10, gt=0)
     top_k: int = Field(default=5, gt=0)
     min_score: float | None = None
+    source: str | None = None
+    document_id: str | None = None
+    citekey: str | None = None
+    doi: str | None = None
+    title: str | None = None
+    zotero_key: str | None = None
     backend: BackendName = "auto"
     collection: str = DEFAULT_VECTOR_COLLECTION
     persist_dir: Path = VECTOR_DB_DIR

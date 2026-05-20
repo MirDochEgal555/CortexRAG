@@ -68,11 +68,12 @@ def test_search_endpoint_serializes_results(monkeypatch) -> None:
     from fastapi.testclient import TestClient
 
     from cortex_rag.api import app as api_app
-    from cortex_rag.retrieval import SearchResult
+    from cortex_rag.retrieval import SearchFilters, SearchResult
 
     def fake_retrieve_context(query: str, **kwargs: object) -> list[SearchResult]:
         assert query == "What changed?"
         assert kwargs["final_k"] == 3
+        assert kwargs["filters"] == SearchFilters(source="zotero", citekey="doe2024rag")
         return [
             SearchResult(
                 chunk_id="overview-3178688:001",
@@ -92,7 +93,10 @@ def test_search_endpoint_serializes_results(monkeypatch) -> None:
     monkeypatch.setattr(api_app, "retrieve_confluence_context", fake_retrieve_context)
     client = TestClient(api_app.create_app())
 
-    response = client.post("/search", json={"query": "What changed?", "top_k": 3})
+    response = client.post(
+        "/search",
+        json={"query": "What changed?", "top_k": 3, "source": "zotero", "citekey": "doe2024rag"},
+    )
 
     assert response.status_code == 200
     assert response.json() == {
@@ -117,11 +121,12 @@ def test_answer_endpoint_serializes_grounded_answer(monkeypatch) -> None:
 
     from cortex_rag.api import app as api_app
     from cortex_rag.generation import AnswerTimings, ConfluenceAnswerResult, GenerationResult
-    from cortex_rag.retrieval import SearchResult
+    from cortex_rag.retrieval import SearchFilters, SearchResult
 
     def fake_answer_question(question: str, **kwargs: object) -> ConfluenceAnswerResult:
         assert question == "What changed?"
         assert kwargs["top_k"] == 2
+        assert kwargs["filters"] == SearchFilters(source="zotero", citekey="doe2024rag")
         return ConfluenceAnswerResult(
             question=question,
             answer_mode="normal",
@@ -157,7 +162,7 @@ def test_answer_endpoint_serializes_grounded_answer(monkeypatch) -> None:
     monkeypatch.setattr(api_app, "answer_confluence_question", fake_answer_question)
     client = TestClient(api_app.create_app())
 
-    response = client.post("/answer", json={"query": "What changed?"})
+    response = client.post("/answer", json={"query": "What changed?", "source": "zotero", "citekey": "doe2024rag"})
 
     assert response.status_code == 200
     assert response.json()["answer"] == "Grounded answer."
@@ -172,10 +177,11 @@ def test_graph_neighborhood_endpoint_returns_nodes_and_edges(monkeypatch) -> Non
 
     from cortex_rag.api import app as api_app
     from cortex_rag.graph import GraphArtifact, GraphEdge, GraphNode
-    from cortex_rag.retrieval import SearchResult
+    from cortex_rag.retrieval import SearchFilters, SearchResult
 
     def fake_retrieve_context(query: str, **kwargs: object) -> list[SearchResult]:
         assert query == "What changed?"
+        assert kwargs["filters"] == SearchFilters(source="zotero", citekey="doe2024rag")
         return [
             SearchResult(
                 chunk_id="architecture-3309569:001",
@@ -261,7 +267,10 @@ def test_graph_neighborhood_endpoint_returns_nodes_and_edges(monkeypatch) -> Non
     monkeypatch.setattr(api_app, "load_confluence_graph", fake_load_graph)
     client = TestClient(api_app.create_app())
 
-    response = client.post("/graph/neighborhood", json={"query": "What changed?"})
+    response = client.post(
+        "/graph/neighborhood",
+        json={"query": "What changed?", "source": "zotero", "citekey": "doe2024rag"},
+    )
 
     assert response.status_code == 200
     payload = response.json()

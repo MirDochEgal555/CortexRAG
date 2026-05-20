@@ -372,7 +372,7 @@ The original guardrails remain correct:
 
 The next steps should be incremental and preserve the current narrow scope:
 
-1. tighten the current graph UX with better loading, reset, fit, and selection controls
+1. tighten the current graph UX with better loading and deeper selection controls
 2. improve graph readability for larger neighborhoods before adding more node types
 3. add small polish to empty/error states and evidence presentation
 4. only then evaluate whether a second mode is justified

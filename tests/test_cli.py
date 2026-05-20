@@ -15,7 +15,7 @@ from cortex_rag import cli
 from cortex_rag.generation import AnswerTimings, ConfluenceAnswerResult, GenerationResult
 from cortex_rag.graph import GraphBuildResult
 from cortex_rag.index_status import SearchableIndexStatus
-from cortex_rag.retrieval import SearchResult
+from cortex_rag.retrieval import SearchFilters, SearchResult
 
 
 def test_similarity_search_cli_formats_results(
@@ -27,6 +27,7 @@ def test_similarity_search_cli_formats_results(
         assert kwargs["candidate_k"] == 10
         assert kwargs["final_k"] == 2
         assert kwargs["min_score"] == 0.7
+        assert kwargs["filters"] is None
         return [
             SearchResult(
                 chunk_id="overview-3178688:001",
@@ -45,6 +46,31 @@ def test_similarity_search_cli_formats_results(
         "   Overview :: Lead qualification",
         "   The agent qualifies and prioritizes leads.",
     ]
+
+
+def test_similarity_search_cli_passes_paper_filters(
+    monkeypatch,
+    capsys,
+) -> None:
+    def fake_retrieve_context(query: str, **kwargs: object) -> list[SearchResult]:
+        assert query == "What dataset did they use?"
+        assert kwargs["filters"] == SearchFilters(source="zotero", citekey="doe2024rag")
+        return []
+
+    monkeypatch.setattr(cli, "retrieve_confluence_context", fake_retrieve_context)
+
+    cli.main(
+        [
+            "similarity-search",
+            "What dataset did they use?",
+            "--source",
+            "zotero",
+            "--citekey",
+            "doe2024rag",
+        ]
+    )
+
+    assert capsys.readouterr().out == ""
 
 
 def test_similarity_search_cli_skips_empty_metadata_line(
@@ -83,6 +109,7 @@ def test_ask_cli_formats_answer_sources_and_timings(
         assert question == "What changed?"
         assert kwargs["top_k"] == 2
         assert kwargs["min_score"] == 0.7
+        assert kwargs["filters"] is None
         return ConfluenceAnswerResult(
             question=question,
             answer_mode="normal",
@@ -134,6 +161,48 @@ def test_ask_cli_formats_answer_sources_and_timings(
         "first_token: 0.12s",
         "generation: 1.50s",
         "total: 2.25s",
+    ]
+
+
+def test_ask_paper_cli_scopes_answer_to_zotero_citekey(
+    monkeypatch,
+    capsys,
+) -> None:
+    def fake_answer_question(question: str, **kwargs: object) -> ConfluenceAnswerResult:
+        assert question == "What is the main contribution?"
+        assert kwargs["top_k"] == 4
+        assert kwargs["candidate_k"] == 50
+        assert kwargs["filters"] == SearchFilters(source="zotero", citekey="doe2024rag")
+        return ConfluenceAnswerResult(
+            question=question,
+            answer_mode="normal",
+            prompt_path=Path("prompts/confluence_rag.md"),
+            backend="chroma",
+            collection_name="knowledge",
+            sources=[],
+            messages=[],
+            generation=None,
+            timings=AnswerTimings(
+                embedding_seconds=0.5,
+                retrieval_seconds=0.25,
+                generation_seconds=0.0,
+                total_seconds=1.25,
+                first_token_seconds=None,
+            ),
+        )
+
+    monkeypatch.setattr(cli, "answer_confluence_question", fake_answer_question)
+
+    cli.main(["ask-paper", "doe2024rag", "What is the main contribution?"])
+
+    assert capsys.readouterr().out.splitlines() == [
+        "No relevant context was found. Ollama was not called.",
+        "",
+        "Timings:",
+        "embedding: 0.50s",
+        "retrieval: 0.25s",
+        "generation: 0.00s",
+        "total: 1.25s",
     ]
 
 

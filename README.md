@@ -70,6 +70,13 @@ python -m cortex_rag ask "What does the architecture say about the execution lay
 python -m cortex_rag ask "How are leads qualified?" --mode technical
 ```
 
+Scope retrieval to one Zotero paper:
+
+```powershell
+python -m cortex_rag ask-paper doe2024rag "What is the main contribution?"
+python -m cortex_rag similarity-search "What dataset did they use?" --source zotero --citekey doe2024rag
+```
+
 Build only the graph artifact:
 
 ```powershell

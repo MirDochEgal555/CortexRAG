@@ -230,10 +230,16 @@ def build_graph_neighborhood(
     graph: GraphArtifact,
     *,
     seed_chunk_ids: list[str],
+    allowed_chunk_ids: list[str] | None = None,
 ) -> GraphNeighborhood:
     """Select a small neighborhood around retrieved chunk nodes."""
 
     nodes_by_id = {node.id: node for node in graph.nodes}
+    allowed_node_ids = (
+        {f"chunk::{chunk_id}" for chunk_id in allowed_chunk_ids}
+        if allowed_chunk_ids is not None
+        else None
+    )
     edges_by_node: dict[str, list[GraphEdge]] = {}
     for edge in graph.edges:
         edges_by_node.setdefault(edge.source, []).append(edge)
@@ -248,9 +254,11 @@ def build_graph_neighborhood(
 
     for seed_node_id in seed_node_ids:
         for edge in edges_by_node.get(seed_node_id, []):
+            other_node_id = edge.target if edge.source == seed_node_id else edge.source
+            if not _edge_allowed_for_neighborhood(edge, other_node_id, allowed_node_ids):
+                continue
             included_edges[edge.id] = edge
             query_path_edges.add(edge.id)
-            other_node_id = edge.target if edge.source == seed_node_id else edge.source
             included_nodes.add(other_node_id)
             query_path_nodes.add(other_node_id)
             if edge.type == "belongs_to":
@@ -280,6 +288,18 @@ def build_graph_neighborhood(
         nodes=nodes,
         edges=edges,
     )
+
+
+def _edge_allowed_for_neighborhood(
+    edge: GraphEdge,
+    other_node_id: str,
+    allowed_node_ids: set[str] | None,
+) -> bool:
+    if allowed_node_ids is None or edge.type == "belongs_to":
+        return True
+    if not other_node_id.startswith("chunk::"):
+        return True
+    return other_node_id in allowed_node_ids
 
 
 def _build_membership_graph(

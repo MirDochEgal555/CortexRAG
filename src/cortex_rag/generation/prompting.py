@@ -71,6 +71,8 @@ def format_retrieval_context(results: list[SearchResult]) -> str:
     for index, result in enumerate(results, start=1):
         page = _metadata_text(result.metadata, "page") or "Unknown page"
         section = _metadata_text(result.metadata, "section") or "Unspecified section"
+        citation_metadata = _format_citation_metadata(result.metadata)
+        metadata_lines = [f"Metadata: {citation_metadata}"] if citation_metadata else []
         blocks.append(
             "\n".join(
                 [
@@ -79,6 +81,7 @@ def format_retrieval_context(results: list[SearchResult]) -> str:
                     f"Page: {page}",
                     f"Section: {section}",
                     f"Score: {result.score:.4f}",
+                    *metadata_lines,
                     "Text:",
                     result.text.strip(),
                 ]
@@ -99,5 +102,39 @@ def normalize_answer_mode(answer_mode: AnswerMode | str) -> AnswerMode:
 
 
 def _metadata_text(metadata: dict[str, object], key: str) -> str:
-    value = metadata.get(key)
+    value = _metadata_value(metadata, key)
     return str(value).strip() if value not in (None, "") else ""
+
+
+def _format_citation_metadata(metadata: dict[str, object]) -> str:
+    fields = [
+        ("Authors", _metadata_value(metadata, "authors")),
+        ("Year", _metadata_value(metadata, "year")),
+        ("Publication", _metadata_value(metadata, "publication_title")),
+        ("DOI", _metadata_value(metadata, "doi")),
+        ("Citekey", _metadata_value(metadata, "citekey")),
+        ("Tags", _metadata_value(metadata, "tags")),
+    ]
+    rendered = [
+        f"{label}: {_format_metadata_value(value)}"
+        for label, value in fields
+        if value not in (None, "", [])
+    ]
+    return "; ".join(rendered)
+
+
+def _metadata_value(metadata: dict[str, object], key: str) -> object:
+    value = metadata.get(key)
+    if value not in (None, ""):
+        return value
+
+    nested_metadata = metadata.get("metadata")
+    if isinstance(nested_metadata, dict):
+        return nested_metadata.get(key)
+    return None
+
+
+def _format_metadata_value(value: object) -> str:
+    if isinstance(value, list):
+        return ", ".join(str(item) for item in value)
+    return str(value)

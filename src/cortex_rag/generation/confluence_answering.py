@@ -21,7 +21,12 @@ from cortex_rag.config import (
 )
 from cortex_rag.generation.ollama_client import GenerationResult, chat_with_ollama
 from cortex_rag.generation.prompting import AnswerMode, build_confluence_rag_messages, normalize_answer_mode
-from cortex_rag.retrieval import SearchResult, embed_confluence_query, retrieve_confluence_context_by_embedding
+from cortex_rag.retrieval import (
+    SearchFilters,
+    SearchResult,
+    embed_confluence_query,
+    retrieve_confluence_context_by_embedding,
+)
 from cortex_rag.retrieval.vector_store import ResolvedBackend, VectorBackend
 
 
@@ -85,6 +90,7 @@ def answer_confluence_question(
     stream: bool = False,
     token_callback: Callable[[str], None] | None = None,
     clock: Callable[[], float] = perf_counter,
+    filters: SearchFilters | None = None,
 ) -> ConfluenceAnswerResult:
     """Embed, retrieve, prompt, and optionally generate a grounded answer."""
 
@@ -112,6 +118,7 @@ def answer_confluence_question(
         persist_dir=persist_dir,
         collection_name=manifest.collection_name,
         backend=manifest.backend,
+        filters=filters,
     )
     retrieval_seconds = clock() - retrieval_started_at
 

@@ -74,21 +74,50 @@ Zotero and Obsidian are now searchable through the default mixed `knowledge` col
 
 Not included yet:
 
-- source filters in the UI
 - separate source-specific Obsidian or Zotero vector collections
 - Zotero PDF text extraction
 - Zotero writeback
 - Obsidian writeback
 
+## Paper-Scoped Retrieval
+
+The current search and answer paths can constrain retrieval to existing Zotero chunks by metadata. This is useful for asking questions about one paper without letting nearby Obsidian notes or other papers dominate the result set.
+
+CLI examples:
+
+```bash
+python -m cortex_rag similarity-search "What dataset did they evaluate on?" --source zotero --citekey doe2024rag
+python -m cortex_rag ask "What are the limitations?" --source zotero --citekey doe2024rag
+python -m cortex_rag ask-paper doe2024rag "What is the main contribution?"
+```
+
+The API accepts the same filter fields on `/search`, `/answer`, and `/graph/neighborhood`:
+
+```json
+{
+  "query": "What method do they propose?",
+  "source": "zotero",
+  "citekey": "doe2024rag"
+}
+```
+
+Supported filter fields are:
+
+- `source`
+- `document_id`
+- `citekey`
+- `doi`
+- `title`
+- `zotero_key`
+
+The UI exposes source, citekey, DOI, title, document ID, Zotero key, and minimum-score controls in the query dock. Entering a citekey, DOI, or Zotero key scopes retrieval to Zotero automatically.
+
 ## Future Improvements: Paper-Specific Retrieval
 
-The current Zotero path makes papers searchable inside the mixed `knowledge` collection, but paper-specific questions should eventually treat one paper as a structured retrieval scope rather than as unrelated chunks in the global index.
+The current Zotero path makes papers searchable inside the mixed `knowledge` collection, and paper-scoped filters now provide the first useful version of targeted paper retrieval. Future work should treat one paper as a richer structured object, not only as filtered chunks.
 
 Useful future additions:
 
-- paper-scoped retrieval by `document_id`, `citekey`, DOI, title, or Zotero item key
-- UI and API filters that can constrain a question to one selected paper
-- an `ask-paper` style CLI command for targeted questions against one Zotero item
 - Zotero PDF text extraction from matched attachments
 - section-aware paper chunking for abstract, introduction, methods, experiments, results, discussion, limitations, and conclusion
 - page-aware chunk metadata when PDF extraction provides reliable page numbers
@@ -112,7 +141,7 @@ This would support questions such as:
 - "Where do they discuss limitations?"
 - "Summarize only the results section."
 
-Implementation should start with paper-scoped filters before adding new extraction or summarization layers. The smallest useful version is metadata/document filtering over the existing Zotero chunks.
+The next implementation step should be Zotero PDF text extraction, because the current filters can only retrieve whatever is already present in the Zotero metadata, abstract, bibliography, and exported notes.
 
 ## Chunk Record Contract
 

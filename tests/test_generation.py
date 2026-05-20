@@ -63,6 +63,31 @@ def test_format_retrieval_context_includes_metadata() -> None:
     )
 
 
+def test_format_retrieval_context_includes_zotero_citation_metadata() -> None:
+    results = [
+        SearchResult(
+            chunk_id="zotero::doe2024rag:001",
+            score=0.9123,
+            text="The paper evaluates retrieval-augmented generation for knowledge work.",
+            metadata={
+                "page": "Retrieval-Augmented Generation for Knowledge Work",
+                "section": "Abstract",
+                "metadata": {
+                    "authors": ["Jane Doe", "Max Smith"],
+                    "year": 2024,
+                    "publication_title": "Knowledge Systems",
+                    "doi": "10.1000/rag",
+                    "citekey": "doe2024rag",
+                    "tags": ["rag", "evaluation"],
+                },
+            },
+        )
+    ]
+
+    assert "Metadata: Authors: Jane Doe, Max Smith; Year: 2024" in format_retrieval_context(results)
+    assert "DOI: 10.1000/rag; Citekey: doe2024rag; Tags: rag, evaluation" in format_retrieval_context(results)
+
+
 def test_format_retrieval_context_returns_placeholder_without_results() -> None:
     assert format_retrieval_context([]) == "No retrieved context was available."
 

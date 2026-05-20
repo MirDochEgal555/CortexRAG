@@ -14,8 +14,10 @@ import type {
   GraphEdgePayload,
   GraphNeighborhoodResponse,
   GraphNodePayload,
+  RetrievalFilters,
   SearchResultPayload,
-  SearchResponse
+  SearchResponse,
+  SourceScope
 } from "./types";
 
 const EXAMPLE_QUERIES = [
@@ -36,10 +38,18 @@ export default function App() {
   const [query, setQuery] = useState<string>(EXAMPLE_QUERIES[0]);
   const deferredQuery = useDeferredValue(query);
   const [answerMode, setAnswerMode] = useState<AnswerMode>("normal");
+  const [sourceScope, setSourceScope] = useState<SourceScope>("all");
+  const [documentId, setDocumentId] = useState<string>("");
+  const [citekey, setCitekey] = useState<string>("");
+  const [doi, setDoi] = useState<string>("");
+  const [titleFilter, setTitleFilter] = useState<string>("");
+  const [zoteroKey, setZoteroKey] = useState<string>("");
+  const [minScore, setMinScore] = useState<string>("");
   const [graph, setGraph] = useState<GraphNeighborhoodResponse | null>(null);
   const [answer, setAnswer] = useState<AnswerResponse | null>(null);
   const [search, setSearch] = useState<SearchResponse | null>(null);
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  const [isolateSelection, setIsolateSelection] = useState(false);
   const [statusLabel, setStatusLabel] = useState("Checking backend");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -195,21 +205,15 @@ export default function App() {
       return;
     }
 
-    const elements = graph ? buildElements(graph, selectedNodeId) : [];
+    const visibleGraph = graph && isolateSelection ? isolateGraph(graph, selectedNodeId) : graph;
+    const elements = visibleGraph ? buildElements(visibleGraph, selectedNodeId) : [];
     cy.elements().remove();
     cy.add(elements);
 
     if (elements.length > 0) {
-      cy.layout({
-        name: "cose",
-        animate: false,
-        fit: true,
-        padding: 36,
-        nodeRepulsion: 110000,
-        idealEdgeLength: 120
-      }).run();
+      runGraphLayout(cy);
     }
-  }, [graph, selectedNodeId]);
+  }, [graph, selectedNodeId, isolateSelection]);
 
   async function handleSubmit(event?: FormEvent<HTMLFormElement>) {
     event?.preventDefault();
@@ -222,12 +226,21 @@ export default function App() {
 
     setIsSubmitting(true);
     setErrorMessage(null);
+    const retrievalFilters = buildRetrievalFilters({
+      sourceScope,
+      documentId,
+      citekey,
+      doi,
+      titleFilter,
+      zoteroKey,
+      minScore
+    });
 
     try {
       const [graphPayload, answerPayload, searchPayload] = await Promise.all([
-        fetchGraphNeighborhood(nextQuery),
-        fetchAnswer(nextQuery, answerMode),
-        fetchSearch(nextQuery)
+        fetchGraphNeighborhood(nextQuery, retrievalFilters),
+        fetchAnswer(nextQuery, answerMode, retrievalFilters),
+        fetchSearch(nextQuery, retrievalFilters)
       ]);
 
       startTransition(() => {
@@ -249,6 +262,15 @@ export default function App() {
   const selectedEdges = graph ? relatedEdges(graph.edges, selectedNodeId) : [];
   const connectedNodes = graph ? relatedNodes(graph.nodes, selectedEdges, selectedNodeId) : [];
   const selectedMatches = selectedNode ? searchResultsForNode(selectedNode, search?.results ?? []) : [];
+  const activeFilters = buildFilterSummary({
+    sourceScope,
+    documentId,
+    citekey,
+    doi,
+    titleFilter,
+    zoteroKey,
+    minScore
+  });
 
   return (
     <div className="app-shell">
@@ -298,6 +320,39 @@ export default function App() {
               </select>
             </div>
 
+            <div className="inline-control">
+              <span>Source</span>
+              <select value={sourceScope} onChange={(event) => setSourceScope(event.target.value as SourceScope)}>
+                <option value="all">all</option>
+                <option value="zotero">zotero</option>
+                <option value="obsidian">obsidian</option>
+              </select>
+            </div>
+
+            <div className="inline-control citekey-control">
+              <span>Citekey</span>
+              <input
+                value={citekey}
+                onChange={(event) => setCitekey(event.target.value)}
+                placeholder="doe2024rag"
+                disabled={sourceScope === "obsidian"}
+              />
+            </div>
+
+            <div className="inline-control score-control">
+              <span>Min score</span>
+              <input
+                value={minScore}
+                onChange={(event) => setMinScore(event.target.value)}
+                inputMode="decimal"
+                type="number"
+                min="0"
+                max="1"
+                step="0.01"
+                placeholder="0.65"
+              />
+            </div>
+
             <div className="query-actions">
               <span className="draft-hint">Drafting: {deferredQuery || "No prompt yet"}</span>
               <button type="submit" className="submit-button" disabled={isSubmitting}>
@@ -305,12 +360,57 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          <details className="advanced-filters">
+            <summary>Paper filters</summary>
+            <div className="filter-grid">
+              <div className="inline-control">
+                <span>DOI</span>
+                <input
+                  value={doi}
+                  onChange={(event) => setDoi(event.target.value)}
+                  placeholder="10.xxxx/yyyy"
+                  disabled={sourceScope === "obsidian"}
+                />
+              </div>
+              <div className="inline-control">
+                <span>Title</span>
+                <input value={titleFilter} onChange={(event) => setTitleFilter(event.target.value)} />
+              </div>
+              <div className="inline-control">
+                <span>Document ID</span>
+                <input value={documentId} onChange={(event) => setDocumentId(event.target.value)} />
+              </div>
+              <div className="inline-control">
+                <span>Zotero key</span>
+                <input
+                  value={zoteroKey}
+                  onChange={(event) => setZoteroKey(event.target.value)}
+                  disabled={sourceScope === "obsidian"}
+                />
+              </div>
+            </div>
+          </details>
         </form>
 
         <div className="dock-summary">
           <div>
             <p className="summary-label">Last query</p>
             <p className="summary-value">{lastSubmittedQuery || "No query submitted yet."}</p>
+          </div>
+          <div>
+            <p className="summary-label">Active filters</p>
+            <div className="filter-chip-list">
+              {activeFilters.length > 0 ? (
+                activeFilters.map((filter) => (
+                  <span key={filter} className="filter-chip">
+                    {filter}
+                  </span>
+                ))
+              ) : (
+                <p className="summary-value">All sources</p>
+              )}
+            </div>
           </div>
           <div>
             <p className="summary-label">Top hits</p>
@@ -344,8 +444,30 @@ export default function App() {
               <h2>Knowledge canvas</h2>
             </div>
             <div className="panel-badges">
-              <span className="badge">Documents + Chunks</span>
-              <span className="badge">Belongs + Similarity</span>
+              <button type="button" className="tool-button" onClick={() => fitGraph(cytoscapeRef.current)}>
+                Fit
+              </button>
+              <button type="button" className="tool-button" onClick={() => resetGraph(cytoscapeRef.current)}>
+                Reset
+              </button>
+              <button
+                type="button"
+                className={`tool-button ${isolateSelection ? "tool-button-active" : ""}`}
+                onClick={() => setIsolateSelection((value) => !value)}
+                disabled={!selectedNode}
+              >
+                Isolate
+              </button>
+              <button
+                type="button"
+                className="tool-button"
+                onClick={() => {
+                  setSelectedNodeId(null);
+                  setIsolateSelection(false);
+                }}
+              >
+                Clear
+              </button>
             </div>
           </div>
 
@@ -542,6 +664,120 @@ function buildElements(
   }));
 
   return [...nodeElements, ...edgeElements];
+}
+
+function runGraphLayout(cy: cytoscape.Core) {
+  cy.layout({
+    name: "cose",
+    animate: false,
+    fit: true,
+    padding: 36,
+    nodeRepulsion: 110000,
+    idealEdgeLength: 120
+  }).run();
+}
+
+function fitGraph(cy: cytoscape.Core | null) {
+  if (!cy || cy.elements().length === 0) {
+    return;
+  }
+  cy.fit(undefined, 36);
+}
+
+function resetGraph(cy: cytoscape.Core | null) {
+  if (!cy || cy.elements().length === 0) {
+    return;
+  }
+  runGraphLayout(cy);
+}
+
+function isolateGraph(
+  graph: GraphNeighborhoodResponse,
+  selectedNodeId: string | null
+): GraphNeighborhoodResponse {
+  if (!selectedNodeId) {
+    return graph;
+  }
+
+  const visibleNodeIds = new Set<string>([selectedNodeId]);
+  const visibleEdges = graph.edges.filter((edge) => {
+    const isRelated = edge.source === selectedNodeId || edge.target === selectedNodeId;
+    if (isRelated) {
+      visibleNodeIds.add(edge.source);
+      visibleNodeIds.add(edge.target);
+    }
+    return isRelated;
+  });
+
+  return {
+    ...graph,
+    nodes: graph.nodes.filter((node) => visibleNodeIds.has(node.id)),
+    edges: visibleEdges
+  };
+}
+
+function buildRetrievalFilters(options: {
+  sourceScope: SourceScope;
+  documentId: string;
+  citekey: string;
+  doi: string;
+  titleFilter: string;
+  zoteroKey: string;
+  minScore: string;
+}): RetrievalFilters {
+  const trimmedCitekey = options.citekey.trim();
+  const trimmedDocumentId = options.documentId.trim();
+  const trimmedDoi = options.doi.trim();
+  const trimmedTitle = options.titleFilter.trim();
+  const trimmedZoteroKey = options.zoteroKey.trim();
+  const parsedMinScore = Number.parseFloat(options.minScore);
+  const filters: RetrievalFilters = {};
+  if (options.sourceScope !== "all") {
+    filters.source = options.sourceScope;
+  }
+  if (trimmedDocumentId) {
+    filters.document_id = trimmedDocumentId;
+  }
+  if (trimmedCitekey && options.sourceScope !== "obsidian") {
+    filters.source = "zotero";
+    filters.citekey = trimmedCitekey;
+  }
+  if (trimmedDoi && options.sourceScope !== "obsidian") {
+    filters.source = "zotero";
+    filters.doi = trimmedDoi;
+  }
+  if (trimmedTitle) {
+    filters.title = trimmedTitle;
+  }
+  if (trimmedZoteroKey && options.sourceScope !== "obsidian") {
+    filters.source = "zotero";
+    filters.zotero_key = trimmedZoteroKey;
+  }
+  if (!Number.isNaN(parsedMinScore) && parsedMinScore >= 0 && parsedMinScore <= 1) {
+    filters.min_score = parsedMinScore;
+  }
+  return filters;
+}
+
+function buildFilterSummary(options: {
+  sourceScope: SourceScope;
+  documentId: string;
+  citekey: string;
+  doi: string;
+  titleFilter: string;
+  zoteroKey: string;
+  minScore: string;
+}): string[] {
+  const filters = buildRetrievalFilters(options);
+  return [
+    filters.source ? `source: ${filters.source}` : "",
+    filters.citekey ? `citekey: ${filters.citekey}` : "",
+    filters.doi ? `doi: ${filters.doi}` : "",
+    filters.title ? `title: ${filters.title}` : "",
+    filters.document_id ? `document: ${filters.document_id}` : "",
+    filters.zotero_key ? `zotero: ${filters.zotero_key}` : "",
+    filters.min_score !== undefined ? `score >= ${filters.min_score}` : ""
+  ].filter(Boolean);
 }
 
 function relatedEdges(edges: GraphEdgePayload[], selectedNodeId: string | null): GraphEdgePayload[] {

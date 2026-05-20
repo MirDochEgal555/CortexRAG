@@ -3,6 +3,7 @@ import type {
   AnswerMode,
   AnswerResponse,
   GraphNeighborhoodResponse,
+  RetrievalFilters,
   SearchResponse
 } from "./types";
 
@@ -41,27 +42,62 @@ export async function getHealth(): Promise<{ status: string; service: string }> 
   return (await response.json()) as { status: string; service: string };
 }
 
-export function fetchGraphNeighborhood(query: string): Promise<GraphNeighborhoodResponse> {
+function withFilters(payload: Record<string, unknown>, filters: RetrievalFilters): Record<string, unknown> {
+  return {
+    ...payload,
+    ...(filters.source ? { source: filters.source } : {}),
+    ...(filters.document_id ? { document_id: filters.document_id } : {}),
+    ...(filters.citekey ? { citekey: filters.citekey } : {}),
+    ...(filters.doi ? { doi: filters.doi } : {}),
+    ...(filters.title ? { title: filters.title } : {}),
+    ...(filters.zotero_key ? { zotero_key: filters.zotero_key } : {}),
+    ...(filters.min_score !== undefined ? { min_score: filters.min_score } : {})
+  };
+}
+
+export function fetchGraphNeighborhood(
+  query: string,
+  filters: RetrievalFilters
+): Promise<GraphNeighborhoodResponse> {
   return postJSON<GraphNeighborhoodResponse>("/graph/neighborhood", {
-    query,
-    top_k: 5,
-    candidate_k: 10
+    ...withFilters(
+      {
+        query,
+        top_k: 5,
+        candidate_k: 10
+      },
+      filters
+    )
   });
 }
 
-export function fetchAnswer(query: string, answerMode: AnswerMode): Promise<AnswerResponse> {
+export function fetchAnswer(
+  query: string,
+  answerMode: AnswerMode,
+  filters: RetrievalFilters
+): Promise<AnswerResponse> {
   return postJSON<AnswerResponse>("/answer", {
-    query,
-    answer_mode: answerMode,
-    top_k: 3,
-    candidate_k: 10
+    ...withFilters(
+      {
+        query,
+        answer_mode: answerMode,
+        top_k: 3,
+        candidate_k: 10
+      },
+      filters
+    )
   });
 }
 
-export function fetchSearch(query: string): Promise<SearchResponse> {
+export function fetchSearch(query: string, filters: RetrievalFilters): Promise<SearchResponse> {
   return postJSON<SearchResponse>("/search", {
-    query,
-    top_k: 5,
-    candidate_k: 10
+    ...withFilters(
+      {
+        query,
+        top_k: 5,
+        candidate_k: 10
+      },
+      filters
+    )
   });
 }
