@@ -7,6 +7,11 @@ import json
 from pathlib import Path
 import re
 
+try:
+    from pypdf import PdfReader
+except ImportError:  # pragma: no cover - exercised only in incomplete runtime environments.
+    PdfReader = None  # type: ignore[assignment]
+
 from cortex_rag.config import CHUNKS_DIR, PROCESSED_DATA_DIR, RAW_DATA_DIR
 from cortex_rag.ingestion.markdown_sources import (
     build_markdown_document,
@@ -42,6 +47,23 @@ class ZoteroItem:
         return self.item_key
 
 
+@dataclass(slots=True)
+class AttachmentText:
+    """Text extracted from a Zotero attachment."""
+
+    path: Path
+    page_texts: list[str]
+    error: str | None = None
+
+    @property
+    def page_count(self) -> int:
+        return len(self.page_texts)
+
+    @property
+    def text(self) -> str:
+        return "\n\n".join(page for page in self.page_texts if page.strip()).strip()
+
+
 def preprocess_zotero_export(
     input_path: Path,
     output_dir: Path = ZOTERO_PROCESSED_DIR,
@@ -69,9 +91,10 @@ def preprocess_zotero_export(
     for item in items:
         metadata = _item_metadata(item, input_path=input_path, notes_dir=notes_dir, attachments_dir=attachments_dir)
         body = _item_body(item, metadata=metadata)
+        document_metadata = {key: value for key, value in metadata.items() if not key.startswith("_")}
         output_name = _dedupe_name(stable_output_name(item.title, item.citekey), seen_names)
         output_path = output_dir / output_name
-        output_path.write_text(build_markdown_document(metadata, body), encoding="utf-8")
+        output_path.write_text(build_markdown_document(document_metadata, body), encoding="utf-8")
         output_paths.append(output_path)
     return output_paths
 
@@ -236,6 +259,7 @@ def _item_metadata(
     tags = _split_tags(str(item.fields.get("keywords") or item.fields.get("tags") or ""))
     notes = _find_related_files(notes_dir, item)
     attachments = _find_related_files(attachments_dir, item)
+    attachment_texts = [_extract_attachment_text(path) for path in attachments if path.suffix.lower() == ".pdf"]
     return {
         "source": "zotero",
         "zotero_key": item.item_key,
@@ -256,6 +280,14 @@ def _item_metadata(
         "note_paths": [path.name for path in notes],
         "note_texts": [_read_text_file(path) for path in notes],
         "attachment_paths": [path.name for path in attachments],
+        "extracted_attachment_paths": [attachment.path.name for attachment in attachment_texts if attachment.text],
+        "attachment_page_counts": {
+            attachment.path.name: attachment.page_count for attachment in attachment_texts if attachment.page_count
+        },
+        "attachment_extraction_errors": {
+            attachment.path.name: attachment.error for attachment in attachment_texts if attachment.error
+        },
+        "_attachment_texts": attachment_texts,
         "source_path": input_path.name,
     }
 
@@ -269,6 +301,16 @@ def _item_body(item: ZoteroItem, *, metadata: dict[str, object]) -> str:
     notes = [str(note).strip() for note in metadata.get("note_texts", []) if str(note).strip()]
     if notes:
         parts.extend(["", "## Notes", "", "\n\n".join(notes)])
+
+    attachment_texts = [attachment for attachment in metadata.get("_attachment_texts", []) if attachment.text]
+    if attachment_texts:
+        parts.extend(["", "## Attachment Text"])
+        for attachment in attachment_texts:
+            parts.extend(["", f"### {attachment.path.name}"])
+            for page_number, page_text in enumerate(attachment.page_texts, start=1):
+                page_text = page_text.strip()
+                if page_text:
+                    parts.extend(["", f"#### Page {page_number}", "", page_text])
 
     citation_bits = []
     if metadata.get("authors"):
@@ -297,6 +339,33 @@ def _find_related_files(directory: Path, item: ZoteroItem) -> list[Path]:
 
 def _read_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore").strip()
+
+
+def _extract_attachment_text(path: Path) -> AttachmentText:
+    if PdfReader is None:
+        return AttachmentText(path=path, page_texts=[], error="ImportError: pypdf is not installed")
+    try:
+        reader = PdfReader(path)
+        page_texts = [page.extract_text() or "" for page in reader.pages]
+        return AttachmentText(path=path, page_texts=[_normalize_pdf_text(text) for text in page_texts])
+    except Exception as exc:
+        return AttachmentText(path=path, page_texts=[], error=f"{type(exc).__name__}: {exc}")
+
+
+def _normalize_pdf_text(text: str) -> str:
+    lines = [re.sub(r"\s+", " ", line).strip() for line in text.splitlines()]
+    paragraphs: list[str] = []
+    current: list[str] = []
+    for line in lines:
+        if not line:
+            if current:
+                paragraphs.append(" ".join(current))
+                current = []
+            continue
+        current.append(line)
+    if current:
+        paragraphs.append(" ".join(current))
+    return "\n\n".join(paragraphs)
 
 
 def _split_authors(value: str) -> list[str]:
@@ -345,4 +414,7 @@ def _zotero_metadata(metadata: dict[str, object]) -> dict[str, object]:
         "tags": metadata.get("tags", []),
         "note_paths": metadata.get("note_paths", []),
         "attachment_paths": metadata.get("attachment_paths", []),
+        "extracted_attachment_paths": metadata.get("extracted_attachment_paths", []),
+        "attachment_page_counts": metadata.get("attachment_page_counts", {}),
+        "attachment_extraction_errors": metadata.get("attachment_extraction_errors", {}),
     }

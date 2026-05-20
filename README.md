@@ -4,7 +4,7 @@ Local Zotero/Obsidian-to-RAG pipeline with a graph-first UI, grounded answering,
 
 The repository currently supports:
 
-- Zotero and Obsidian preprocessing into Markdown
+- Zotero and Obsidian preprocessing into Markdown, including matched Zotero PDF attachment text
 - heading-aware chunking into retrieval records
 - embedding generation with SentenceTransformers
 - persistent vector-store build with Chroma or FAISS

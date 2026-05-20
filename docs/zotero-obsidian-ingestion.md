@@ -75,7 +75,6 @@ Zotero and Obsidian are now searchable through the default mixed `knowledge` col
 Not included yet:
 
 - separate source-specific Obsidian or Zotero vector collections
-- Zotero PDF text extraction
 - Zotero writeback
 - Obsidian writeback
 
@@ -118,7 +117,6 @@ The current Zotero path makes papers searchable inside the mixed `knowledge` col
 
 Useful future additions:
 
-- Zotero PDF text extraction from matched attachments
 - section-aware paper chunking for abstract, introduction, methods, experiments, results, discussion, limitations, and conclusion
 - page-aware chunk metadata when PDF extraction provides reliable page numbers
 - exact metadata lookup before semantic retrieval for authors, year, DOI, venue, tags, citekey, and attachment paths
@@ -141,7 +139,7 @@ This would support questions such as:
 - "Where do they discuss limitations?"
 - "Summarize only the results section."
 
-The next implementation step should be Zotero PDF text extraction, because the current filters can only retrieve whatever is already present in the Zotero metadata, abstract, bibliography, and exported notes.
+PDF attachment text is now included in the same Zotero document chunks as metadata, abstracts, bibliography, and exported notes. The next useful step is richer paper structure: section-aware chunks, reliable page-span metadata, and exact metadata lookup before semantic retrieval.
 
 ## Chunk Record Contract
 
@@ -335,7 +333,7 @@ Notes and attachments are matched by:
 - citekey
 - title slug
 
-Matched note text is included in the normalized Markdown `## Notes` section. Matched attachment paths are preserved as metadata only. PDF text extraction is not part of the current ingestion implementation.
+Matched note text is included in the normalized Markdown `## Notes` section. Matched PDF attachment text is extracted with `pypdf` and included in the normalized Markdown `## Attachment Text` section, grouped by attachment filename and PDF page number. Attachment paths are preserved as metadata for every matched attachment.
 
 ### 3. Preprocess the Zotero Export
 
@@ -392,6 +390,9 @@ The processed Markdown front matter preserves:
 - `tags`
 - `note_paths`
 - `attachment_paths`
+- `extracted_attachment_paths`
+- `attachment_page_counts`
+- `attachment_extraction_errors`
 - `source_path`
 
 The normalized Markdown body includes:
@@ -399,6 +400,7 @@ The normalized Markdown body includes:
 - `# <title>`
 - `## Abstract`, when available
 - `## Notes`, when matching note files are available
+- `## Attachment Text`, when matching PDF attachments have extractable text
 - `## Bibliography`, when citation metadata is available
 
 ### 5. Chunk Zotero Items
